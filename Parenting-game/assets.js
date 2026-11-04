@@ -146,6 +146,20 @@ window.ASSETS = {
     '..........'
   ],
 
+  // Baby lying down (in the crib), 14x10
+  babyLie: [
+    '..............',
+    '..hhhh........',
+    '.hhhhhh.......',
+    '.hse.seh......',
+    '..ssss........',
+    '..pppppppppp..',
+    '.spppppppppps.',
+    '..pppppppppp..',
+    '..ppppppppkk..',
+    '..............'
+  ],
+
   // Items (8x8)
   food: [
     '........',
