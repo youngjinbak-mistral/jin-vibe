@@ -2,7 +2,10 @@
 
 A tiny pixel-art web game about keeping your family happy. You play a father or a mother alone at home with the baby from 6 AM to midnight. When your spouse comes home at 6 PM, their needs pile on top of the baby's, so you have to prioritize.
 
-- Move with WASD or the arrow keys. Press `E` near a station (kitchen, changing table, toy box, front door) to pick up its item, then press `E` near the baby or your spouse to fulfill their request. Press `Q` (or `E` on empty floor) to drop the item you are holding; dropped items can be picked up again. Press `E` on a dirty spot to clean the room.
+- Move with WASD or the arrow keys. Press `E` near a station (kitchen, changing table, toy box, front door) to pick up its item, then press `E` near the baby or your spouse to fulfill their request. Press `E` on empty floor to drop the item you are holding; dropped items can be picked up again. `Q` remains an optional shortcut, but is no longer advertised in the on-screen controls. Press `E` on a dirty spot to clean the room.
+- Each uncleaned floor stain drains 0.4 happiness per second, starting with the first stain. High-contrast stains have cleanup markers; the HUD shows the stain count, drain rate, and happiness percentage. Cleaning removes that stain's drain and restores 3 happiness.
+- Characters use alternating footfalls paced by actual distance moved, with a neutral idle pose when stopped or blocked. Dad has softer glasses and a smiling face; the toy is a teddy bear.
+- Baby bubbles speak directly: “배고파!”, “졸려”, “기저귀 축축해”, “놀아 줘!”, and “씻겨 줘!”. Partner dialogue stays separate.
 - Every request (밥 hungry, 기저귀 wet diaper, 장난감 bored, 잠 sleepy, 장보기 groceries, 대화 talk, 휴식 rest) has a random timer shown in the bubble above the character. Let it expire and the family happiness bar on top drops. At zero, it's game over.
 - The spouse comes home at 18:00. Complete the visible evening checklist: bring a towel from the bath station to wash the baby (18:30), bring dinner to your partner (19:00), clear all floor stains after 20:00, put the baby to bed after 21:00, and soothe her back to sleep when she wakes after 22:00. Timed routine requests retry after a miss; missing them still costs happiness.
 - Regular requests have 18–28 seconds to act; evening routine requests have 24–34 seconds. Concurrent baby and partner requests make prioritization important.
