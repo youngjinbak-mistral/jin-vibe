@@ -84,6 +84,21 @@ test('photo-inspired pixel sprites are rectangular and use defined colors', () =
   }
 });
 
+test('walk sprites preserve bodies and leg gaps; dad has soft frames and toy has bear ears', () => {
+  const { ASSETS: a } = boot().sandbox;
+  for (const [role, legRow] of [['dad', 16], ['mom', 16], ['baby', 10]]) {
+    for (const pose of ['B', 'C']) {
+      assert.deepEqual(a[role + pose].slice(0, legRow), a[role + 'A'].slice(0, legRow));
+      assert.notDeepEqual(a[role + pose].slice(legRow), a[role + 'A'].slice(legRow));
+      for (const row of a[role + pose].slice(legRow)) assert.match(row, /\.{2}/);
+    }
+  }
+  assert.ok(a.dadA[5].includes('f'));
+  assert.ok(!a.dadA[5].includes('k'));
+  assert.ok(a.dadA[7].includes('SS'));
+  assert.equal(a.toy[0], '.mm..mm.');
+});
+
 test('both roles, movement, collision, bounds, and repeat-key protection', () => {
   for (const role of ['dad', 'mom']) {
     const b = boot();
@@ -236,6 +251,80 @@ test('zero happiness takes precedence over midnight and missing routines cannot 
   b.need('baby', 'hungry', { t: 0.01 });
   b.step();
   assert.equal(b.state, 'over');
+});
+
+test('every floor stain drains happiness until cleaned, with visible feedback', () => {
+  for (const count of [1, 2, 3]) {
+    const b = boot(); b.start();
+    b.g.spawnT.baby = Infinity;
+    b.g.dirtyT = Infinity;
+    b.g.dirty = Array.from({ length: count }, (_, i) => ({ x: 75 + i * 80, y: 252 }));
+    b.step(2);
+    assert.ok(Math.abs(b.g.happiness - (100 - count * 0.8)) < 1e-8);
+    assert.ok(b.drawn.some(s => s.includes(`청소 ${count}곳`)));
+    for (const spot of [...b.g.dirty]) { b.at(spot.x, spot.y); b.key('e'); }
+    assert.equal(b.g.dirty.length, 0);
+    const happy = b.g.happiness;
+    b.step(2);
+    assert.equal(b.g.happiness, happy);
+  }
+});
+
+test('dirt drain pauses with the game and can cause game over without requests', () => {
+  const b = boot(); b.start();
+  b.g.spawnT.baby = Infinity;
+  b.g.dirtyT = Infinity;
+  b.g.dirty = [{ x: 100, y: 250 }];
+  b.g.happiness = 0.1;
+  b.key('p'); b.step(1);
+  assert.equal(b.g.happiness, 0.1);
+  b.key('p'); b.step(1);
+  assert.equal(b.g.happiness, 0);
+  assert.equal(b.state, 'over');
+});
+
+test('walking uses alternating steps and returns to idle when stopped or blocked', () => {
+  const b = boot(); b.start(); b.at(115, 250);
+  const frames = new Set();
+  b.listeners.keydown({ key: 'ArrowRight', target: {}, preventDefault() {} });
+  for (let i = 0; i < 20; i++) { b.step(); frames.add(b.g.player.frame); }
+  b.listeners.keyup({ key: 'ArrowRight' });
+  assert.deepEqual([...frames].sort(), [0, 1, 2]);
+  b.step();
+  assert.equal(b.g.player.frame, 0);
+  assert.equal(b.g.player.animT, 0);
+  b.at(115, 240); b.g.player.frame = 1;
+  b.listeners.keydown({ key: 'ArrowUp', target: {}, preventDefault() {} });
+  b.step();
+  assert.equal(b.g.player.frame, 0);
+  b.listeners.keyup({ key: 'ArrowUp' });
+  Object.assign(b.g.baby, { wx: b.g.baby.x, wy: b.g.baby.y, wanderT: 5, frame: 1 });
+  Object.assign(b.g.spouse, { home: true, atSofa: true, frame: 1 });
+  b.step();
+  assert.equal(b.g.baby.frame, 0);
+  assert.equal(b.g.spouse.frame, 0);
+});
+
+test('baby bubbles speak directly while partner dialogue remains distinct', () => {
+  for (const [type, label] of [['hungry', '배고파!'], ['sleepy', '졸려'], ['wet', '기저귀 축축해'], ['bored', '놀아 줘!'], ['bath', '씻겨 줘!']]) {
+    const b = boot(); b.start(); b.need('baby', type); b.step();
+    assert.ok(b.drawn.includes(label), type);
+  }
+  const b = boot(); b.start(); b.g.spouse.home = true;
+  b.need('spouse', 'hungry'); b.step();
+  assert.ok(b.drawn.includes('배고파요!'));
+});
+
+test('E still drops on empty floor and Q remains an unadvertised shortcut', () => {
+  const b = boot(); b.start();
+  b.at(115); b.key('e'); b.at(75, 258); b.key('e');
+  assert.equal(b.g.carry, null);
+  assert.equal(b.g.drops.length, 1);
+  b.key('e'); assert.equal(b.g.carry, 'food');
+  b.key('q'); assert.equal(b.g.carry, null);
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /내려놓기 Q|Q로 내려놓기/);
+  assert.ok(!b.drawn.some(s => s.includes('Q:')));
 });
 
 test('touch controls, cancellation, pause, focus loss, and visibility changes are safe', () => {
