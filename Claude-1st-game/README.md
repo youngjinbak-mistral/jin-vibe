@@ -8,13 +8,13 @@ A tiny, silent pixel-art dodger for the browser. You are the hero, a pixel portr
 
 ## Play locally
 
-Open `docs/index.html` in any modern browser. There is no build step and no dependencies.
+Open `Claude-1st-game/index.html` in any modern browser. There is no build step and no dependencies.
 
 Append `?t=295` to the URL to start close to the boss fight.
 
 ## Hosting
 
-GitHub Pages serves the `docs/` folder.
+If GitHub Pages serves the repository root, the game is at `/Claude-1st-game/`.
 
 ## Credits
 
