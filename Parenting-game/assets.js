@@ -1,7 +1,7 @@
 window.ASSETS = {
   palette: {
     k: '#191919', w: '#ffffff', s: '#f4c79b', S: '#dfa06c',
-    h: '#33261f', H: '#7a4a26',
+    h: '#33261f', H: '#33261f',
     p: '#f7a8c4', P: '#e07ba4',
     b: '#4166b0', B: '#2f4a86',
     l: '#e3dcc6', L: '#c4bca4',
@@ -112,19 +112,18 @@ window.ASSETS = {
     '..............'
   ],
 
-  // Baby girl: short hair, pink onesie
   babyA: [
     '..hhhhhh..',
     '.hhhhhhhh.',
     '.hssssssh.',
     '.hse..seh.',
     '..ssssss..',
-    '...pppp...',
-    '..pppppp..',
-    '.spppppps.',
-    '..pppppp..',
-    '..pppppp..',
-    '..pp..pp..',
+    '...wwww...',
+    '..kkkkkk..',
+    '.skkkkkks.',
+    '..kkkkkk..',
+    '..kkkkkk..',
+    '..kk..kk..',
     '..ss..ss..',
     '..kk..kk..',
     '..........'
@@ -135,12 +134,12 @@ window.ASSETS = {
     '.hssssssh.',
     '.hse..seh.',
     '..ssssss..',
-    '...pppp...',
-    '..pppppp..',
-    '.spppppps.',
-    '..pppppp..',
-    '..pppppp..',
-    '..pppppp..',
+    '...wwww...',
+    '..kkkkkk..',
+    '.skkkkkks.',
+    '..kkkkkk..',
+    '..kkkkkk..',
+    '..kkkkkk..',
     '..ssssss..',
     '..kkkkkk..',
     '..........'
@@ -153,10 +152,10 @@ window.ASSETS = {
     '.hhhhhh.......',
     '.hse.seh......',
     '..ssss........',
-    '..pppppppppp..',
-    '.spppppppppps.',
-    '..pppppppppp..',
-    '..ppppppppkk..',
+    '..wwkkkkkkkk..',
+    '.swkkkkkkkkks.',
+    '..wwkkkkkkkk..',
+    '..wwkkkkkkkk..',
     '..............'
   ],
 
@@ -169,6 +168,16 @@ window.ASSETS = {
     '.rrrrrr.',
     '..rrrr..',
     '...rr...',
+    '........'
+  ],
+  bath: [
+    '..wwww..',
+    '.wccccw.',
+    '.wccccw.',
+    '.wwwwww.',
+    '.wccccw.',
+    '.wccccw.',
+    '.wwwwww.',
     '........'
   ],
   diaper: [

@@ -3,18 +3,20 @@
   // Logical resolution 480x270, rendered into a 2x backing store for readability.
   const W = 480, H = 270, HUD_H = 22, SCALE = 2;
   const FLOOR_TOP = 214, FLOOR_BOT = 258;
-  const DAY_SECONDS = 300;            // 06:00 -> 24:00 in 5 real minutes
+  const DAY_SECONDS = 480;
   const START_HOUR = 6, END_HOUR = 24, HOME_HOUR = 18;
 
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
 
   function fit() {
-    const s = Math.min(innerWidth / W, innerHeight / H);
+    const controlsHeight = document.getElementById('controls').offsetHeight;
+    const s = Math.min((innerWidth - 16) / W, (innerHeight - controlsHeight - 24) / H);
     cv.style.width = W * s + 'px';
     cv.style.height = H * s + 'px';
   }
   addEventListener('resize', fit);
+  new ResizeObserver(fit).observe(document.getElementById('controls'));
   fit();
 
   function bake(rows, pal) {
@@ -36,9 +38,10 @@
     toy: bake(A.toy, A.palette), groceries: bake(A.groceries, A.palette),
     talk: bake(A.talk, A.palette), sleep: bake(A.sleep, A.palette),
     heart: bake(A.heart, A.palette), sun: bake(A.sun, A.palette),
-    moon: bake(A.moon, A.palette), sparkle: bake(A.sparkle, A.palette)
+    moon: bake(A.moon, A.palette), sparkle: bake(A.sparkle, A.palette),
+    bath: bake(A.bath, A.palette)
   };
-  const ITEM_LABEL = { food: '밥', diaper: '기저귀', toy: '장난감', groceries: '장보기' };
+  const ITEM_LABEL = { food: '밥', diaper: '기저귀', toy: '장난감', groceries: '장보기', bath: '목욕 수건' };
 
   // ---------- audio ----------
   let AC = null;
@@ -88,15 +91,20 @@
   photoPx.width = 120; photoPx.height = 68;
   photo.onload = () => {
     const g = photoPx.getContext('2d');
-    g.drawImage(photo, 0, 0, 120, 68);
+    const scale = Math.max(120 / photo.naturalWidth, 68 / photo.naturalHeight);
+    const width = photo.naturalWidth * scale, height = photo.naturalHeight * scale;
+    g.drawImage(photo, (120 - width) / 2, (68 - height) / 2, width, height);
   };
   photo.src = 'assets/family-photo.jpg';
+  const portrait = new Image();
+  portrait.src = 'assets/family-portrait.jpg';
 
   // ---------- world layout ----------
   const stations = [
     { id: 'door',    x: 18,  y: 150, w: 38, h: 82, item: 'groceries', icon: 'groceries', label: '장보기' },
     { id: 'kitchen', x: 84,  y: 190, w: 62, h: 42, item: 'food',      icon: 'food',      label: '밥' },
     { id: 'changer', x: 168, y: 194, w: 46, h: 38, item: 'diaper',    icon: 'diaper',    label: '기저귀' },
+    { id: 'bath',    x: 283, y: 210, w: 32, h: 22, item: 'bath',      icon: 'bath',      label: '목욕' },
     { id: 'toybox',  x: 236, y: 198, w: 40, h: 34, item: 'toy',       icon: 'toy',       label: '장난감' },
     { id: 'sofa',    x: 328, y: 192, w: 68, h: 40, item: null,        icon: 'talk',      label: '대화/휴식' },
     { id: 'crib',    x: 410, y: 190, w: 54, h: 42, item: null,        icon: 'sleep',     label: '잠' }
@@ -111,7 +119,15 @@
     sleepy:    { icon: 'sleep',     item: null,        label: '잠이 와요…' },
     groceries: { icon: 'groceries', item: 'groceries', label: '장 봐줘요!' },
     talk:      { icon: 'talk',      item: null,        label: '이야기해요!' },
-    tired:     { icon: 'sleep',     item: null,        label: '피곤해요…' }
+    tired:     { icon: 'sleep',     item: null,        label: '피곤해요…' },
+    bath:      { icon: 'bath',      item: 'bath',      label: '목욕할래요!' }
+  };
+  const ROUTINES = {
+    bath: { hour: 18.5, who: 'baby', type: 'bath', label: '아기 목욕' },
+    dinner: { hour: 19, who: 'spouse', type: 'hungry', label: '저녁 식사' },
+    clean: { hour: 20, label: '방 청소' },
+    bedtime: { hour: 21, who: 'baby', type: 'sleepy', label: '아기 재우기' },
+    soothe: { hour: 22, who: 'baby', type: 'sleepy', label: '다시 재우기' }
   };
 
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -122,6 +138,7 @@
   let state = 'title';
   let sel = 0;               // 0 = dad, 1 = mom
   let G = null;
+  let paused = false;
 
   function newGame() {
     G = {
@@ -131,16 +148,20 @@
       drops: [],
       role: sel === 0 ? 'dad' : 'mom',
       player: { x: 250, y: 240, dir: 1, frame: 0, animT: 0 },
-      baby: { x: 300, y: 240, dir: -1, state: 'awake', sleepT: 0, wakeNeed: false, wx: 300, wy: 240, wanderT: 0, frame: 0, animT: 0, cryT: 0 },
+      baby: { x: 318, y: 248, dir: -1, state: 'awake', sleepT: 0, wakeNeed: false, wx: 300, wy: 240, wanderT: 0, frame: 0, animT: 0, cryT: 0 },
       spouse: { x: 37, y: 240, home: false, atSofa: false, dir: 1, frame: 0, animT: 0, cryT: 0 },
       needs: [],
       spawnT: { baby: 4, spouse: Infinity },
       dirty: [], dirtyT: 14,
       particles: [], toasts: [],
       stats: { ok: 0, fail: 0 },
-      flash: 0, nightWakeDone: false
+      flash: 0, nightWakeDone: false,
+      routines: { bath: false, dinner: false, clean: false, bedtime: false, soothe: false },
+      routineRetry: {}, routineCleanStarted: false
     };
-    toast('이동: WASD/방향키 · E: 집기/전달 · Q: 버리기 · 자정까지 행복도를 지켜라!', 4.5);
+    paused = false;
+    clearKeys();
+    toast('물건을 집고 가족에게 전달해요! E: 행동 · Q: 내려놓기', 4.5);
   }
 
   function hour() { return START_HOUR + (G.t / DAY_SECONDS) * (END_HOUR - START_HOUR); }
@@ -152,17 +173,18 @@
 
   function spawnNeed(who) {
     if (G.needs.some(n => n.who === who)) return;
+    if (who === 'baby' && (G.routines.bedtime || hour() >= 21)) return;
     const h = hour();
     let pool;
     if (who === 'baby') {
       if (G.baby.state === 'sleep') return;
       pool = ['hungry', 'wet', 'bored'];
-      if (h >= 12) { pool.push('sleepy', 'sleepy'); }
+      if (h >= 12 && h < 18) { pool.push('sleepy', 'sleepy'); }
     } else {
       pool = ['hungry', 'talk', 'tired', 'groceries'];
     }
     const type = pool[Math.floor(Math.random() * pool.length)];
-    const max = who === 'baby' ? rand(11, 19) : rand(10, 17);
+    const max = who === 'baby' ? rand(18, 28) : rand(18, 25);
     G.needs.push({ who, type, t: max, max });
     if (who === 'baby') sfx.cry();
   }
@@ -171,6 +193,7 @@
     G.needs = G.needs.filter(x => x !== n);
     G.happiness = clamp(G.happiness + 9, 0, 100);
     G.stats.ok++;
+    if (n.routine) G.routines[n.routine] = true;
     G.carry = null;
     sfx.ok();
     const c = n.who === 'baby' ? G.baby : G.spouse;
@@ -179,9 +202,8 @@
     if (n.who === 'baby' && n.type === 'sleepy') {
       G.baby.state = 'sleep';
       G.baby.x = 437; G.baby.y = 222;
-      const h = hour();
-      G.baby.wakeNeed = h >= 20;
-      G.baby.sleepT = h >= 20 ? rand(5, 9) : rand(24, 38);
+      G.baby.wakeNeed = n.routine === 'bedtime';
+      G.baby.sleepT = n.routine ? Infinity : rand(24, 38);
       toast('아기가 잠들었어요… Zzz');
     }
     if (n.who === 'spouse' && n.type === 'tired') toast('배우자가 소파에서 쉬어요.');
@@ -191,6 +213,7 @@
     G.needs = G.needs.filter(x => x !== n);
     G.happiness = clamp(G.happiness - 14, 0, 100);
     G.stats.fail++;
+    if (n.routine) G.routineRetry[n.routine] = G.t + 4;
     G.flash = 0.5;
     const c = n.who === 'baby' ? G.baby : G.spouse;
     c.cryT = 1.2;
@@ -202,12 +225,49 @@
   const keys = {};
   addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
+    if (e.target.tagName === 'BUTTON' && (k === 'enter' || k === ' ')) return;
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
     audio();
     keys[k] = true;
-    handleKey(k);
+    if (!e.repeat) handleKey(k);
   });
   addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  function clearKeys() {
+    Object.keys(keys).forEach(k => { keys[k] = false; });
+  }
+
+  function pauseGame() {
+    if (state !== 'play') return;
+    paused = !paused;
+    clearKeys();
+    document.getElementById('pause').textContent = paused ? '계속 ▶' : '잠깐 쉬기 Ⅱ';
+  }
+
+  addEventListener('blur', () => {
+    clearKeys();
+    if (state === 'play' && !paused) pauseGame();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'play' && !paused) pauseGame();
+  });
+  document.querySelectorAll('[data-key]').forEach(button => {
+    const k = button.dataset.key;
+    button.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      button.setPointerCapture(e.pointerId);
+      audio();
+      keys[k] = true;
+      handleKey(k);
+    });
+    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      button.addEventListener(event, () => { keys[k] = false; });
+    }
+    button.addEventListener('click', e => {
+      if (e.detail === 0) handleKey(k);
+    });
+  });
+  document.getElementById('pause').addEventListener('click', pauseGame);
 
   function handleKey(k) {
     if (state === 'title') {
@@ -215,10 +275,14 @@
       if (k === 'arrowright' || k === 'd') { sel = 1; sfx.click(); }
       if (k === 'e' || k === 'enter') { sfx.click(); newGame(); state = 'play'; }
     } else if (state === 'play') {
+      if (k === 'p' || k === 'escape') { pauseGame(); return; }
+      if (paused) return;
       if (k === 'e') interact();
       if (k === 'q') dropItem();
     } else if (state === 'over' || state === 'win') {
-      if (k === 'r') { sfx.click(); newGame(); state = 'play'; }
+      if (k === 'r' || k === 'enter' || k === 'e') {
+        sfx.click(); state = 'title'; G = null; clearKeys();
+      }
     }
   }
 
@@ -243,17 +307,26 @@
     }
     for (const d of G.drops) cands.push({ d: dist(p.x, p.y, d.x, d.y - 4), r: 22, kind: 'drop', drop: d });
     for (const d of G.dirty) cands.push({ d: dist(p.x, p.y, d.x, d.y), r: 24, kind: 'dirty', spot: d });
-    cands.sort((a, b) => a.d - b.d);
+    const actionable = c => {
+      if (c.kind === 'char') {
+        const need = G.needs.find(n => n.who === c.o.who);
+        return Boolean(need && NEEDS[need.type].item === G.carry);
+      }
+      return c.kind === 'dirty' && !G.carry;
+    };
+    cands.sort((a, b) => Number(b.d <= b.r && actionable(b)) - Number(a.d <= a.r && actionable(a)) || a.d - b.d);
     const c = cands.find(x => x.d <= x.r);
     if (!c) { dropItem(); return; }   // E on empty floor drops the item
     if (c.kind === 'station') {
       if (G.carry === c.s.item) return;
+      if (G.carry) dropItem();
       G.carry = c.s.item;
       sfx.pickup();
       toast(c.s.label + '을/를 집었어요');
     } else if (c.kind === 'char') {
       tryFulfill(c.o);
     } else if (c.kind === 'drop') {
+      if (G.carry) dropItem();
       G.drops = G.drops.filter(x => x !== c.drop);
       G.carry = c.drop.item;
       sfx.pickup();
@@ -261,6 +334,7 @@
     } else if (c.kind === 'dirty') {
       if (G.carry) { toast('손이 가득해요! (Q로 버리거나 전달하세요)'); return; }
       G.dirty = G.dirty.filter(x => x !== c.spot);
+      if (G.routineCleanStarted && G.dirty.length === 0) G.routines.clean = true;
       G.happiness = clamp(G.happiness + 3, 0, 100);
       sfx.clean();
       for (let i = 0; i < 5; i++)
@@ -283,11 +357,38 @@
   }
 
   // ---------- update ----------
-  function update(dt) {
-    if (state !== 'play') return;
-    G.t += dt;
+  function updateRoutines() {
     const h = hour();
-    if (h >= END_HOUR) { state = 'win'; sfx.win(); return; }
+    if (h >= 20 && !G.routineCleanStarted) {
+      G.routineCleanStarted = true;
+      G.dirty.push({ x: 155, y: 250 });
+      toast('저녁 마무리: 목욕 · 식사 · 청소 · 잠자리');
+    }
+    if (h >= 22 && G.routines.bedtime && !G.nightWakeDone) {
+      G.nightWakeDone = true;
+      G.baby.state = 'awake';
+      G.baby.x = 400; G.baby.y = 246;
+      toast('아기가 깼어요. 다시 토닥여 주세요!');
+      sfx.cry();
+    }
+    for (const [id, routine] of Object.entries(ROUTINES)) {
+      if (!routine.who || G.routines[id] || h < routine.hour || G.t < (G.routineRetry[id] || 0)) continue;
+      if (id === 'bedtime' && !G.routines.bath) continue;
+      if (id === 'soothe' && !G.nightWakeDone) continue;
+      if (G.needs.some(n => n.who === routine.who)) continue;
+      if (routine.who === 'baby' && G.baby.state === 'sleep') continue;
+      if (routine.who === 'spouse' && !G.spouse.home) continue;
+      const max = rand(24, 34);
+      G.needs.push({ who: routine.who, type: routine.type, routine: id, t: max, max });
+    }
+  }
+
+  function update(dt) {
+    if (state !== 'play' || paused) return;
+    if (G.happiness <= 0) { state = 'over'; sfx.fail(); return; }
+    G.t = Math.min(DAY_SECONDS, G.t + dt);
+    const h = hour();
+    updateRoutines();
 
     if (G.dirty.length >= 3) {
       G.happiness = clamp(G.happiness - 1.2 * dt, 0, 100);
@@ -321,7 +422,7 @@
 
     G.dirtyT -= dt;
     if (G.dirtyT <= 0) {
-      if (G.dirty.length < 3) G.dirty.push({ x: rand(70, 420), y: rand(224, 252) });
+      if (h < 20 && G.dirty.length < 3) G.dirty.push({ x: rand(70, 420), y: rand(242, 252) });
       G.dirtyT = rand(18, 30);
     }
 
@@ -405,6 +506,10 @@
     if (G.flash > 0) G.flash -= dt;
 
     if (G.happiness <= 0) { state = 'over'; sfx.fail(); }
+    else if (h >= END_HOUR) {
+      state = Object.values(G.routines).every(Boolean) && G.baby.state === 'sleep' && G.dirty.length === 0 ? 'win' : 'over';
+      if (state === 'win') sfx.win(); else sfx.fail();
+    }
   }
 
   // ---------- sky / time ----------
@@ -546,9 +651,10 @@
     for (let i = 0; i < 5; i++) rect(420 + i * 8, 200, 3, 32, '#e8e2d4');
     rect(416, 224, 42, 8, '#aee2f5');
     rect(414, 220, 12, 6, '#ffffff');
-    // floor lamp
-    rect(292, 200, 4, 32, '#9aa0b0');
-    rect(286, 188, 16, 12, '#f2d05a');
+    rect(283, 218, 32, 12, '#aee2f5');
+    rect(281, 215, 36, 5, '#ffffff');
+    rect(287, 230, 4, 2, '#8a6a44');
+    rect(307, 230, 4, 2, '#8a6a44');
     if (s.lamp) {
       const g = ctx.createRadialGradient(294, 194, 4, 294, 194, 90);
       g.addColorStop(0, 'rgba(242,208,90,0.35)');
@@ -562,7 +668,7 @@
     const frames = SPR[sprKey];
     const spr = frames[c.frame & 1];
     const jitter = c.cryT > 0 ? Math.sin(performance.now() / 40) * 1.2 : 0;
-    drawSprite(spr, c.x - spr.width * 2 + jitter, c.y - spr.height * 2, 2, c.dir < 0);
+    drawSprite(spr, c.x - spr.width + jitter, c.y - spr.height * 2, 2, c.dir < 0);
   }
 
   function drawNeedBubble(x, y, n) {
@@ -571,7 +677,7 @@
     ctx.textBaseline = 'top';
     const lw = ctx.measureText(label).width;
     const w = Math.max(34, lw + 26), h = 26;
-    const bx = Math.round(x - w / 2), by = Math.round(y - 62);
+    const bx = Math.round(clamp(x - w / 2, 2, W - w - 2)), by = Math.round(y - 62);
     rect(bx - 1, by - 1, w + 2, h + 2, '#191919');
     rect(bx, by, w, h, '#ffffff');
     drawSprite(SPR[NEEDS[n.type].icon], bx + 3, by + 5, 2, false);
@@ -606,13 +712,13 @@
   function drawToasts() {
     ctx.font = `bold 12px ${FONT_STACK}`;
     ctx.textBaseline = 'top';
-    let y = H - 18 - G.toasts.length * 20;
-    for (const t of G.toasts) {
+    for (const t of G.toasts.slice(-1)) {
+      const size = Math.min(12, 12 * 350 / Math.max(1, ctx.measureText(t.s).width));
+      ctx.font = `bold ${size}px ${FONT_STACK}`;
       const w = ctx.measureText(t.s).width + 16;
-      rect(W / 2 - w / 2, y - 3, w, 18, 'rgba(10,10,20,0.85)');
+      rect(290 - w / 2, 30, w, 18, 'rgba(10,10,20,0.85)');
       ctx.fillStyle = '#fff';
-      ctx.fillText(t.s, W / 2 - ctx.measureText(t.s).width / 2, y);
-      y += 20;
+      ctx.fillText(t.s, 290 - ctx.measureText(t.s).width / 2, 33);
     }
   }
 
@@ -638,7 +744,8 @@
 
     for (const n of G.needs) {
       const c = n.who === 'baby' ? G.baby : G.spouse;
-      drawNeedBubble(c.x, c.y - 26, n);
+      const lift = n.who === 'spouse' && G.needs.some(other => other.who === 'baby') && Math.abs(G.baby.x - c.x) < 130 ? 34 : 0;
+      drawNeedBubble(c.x, c.y - 26 - lift, n);
     }
     if (G.baby.state === 'sleep') {
       ctx.font = `bold 10px ${FONT_STACK}`;
@@ -654,6 +761,11 @@
 
     drawHUD(h);
     drawToasts();
+    rect(4, 29, 91, 91, 'rgba(20,20,31,0.75)');
+    text('오늘의 마무리', 8, 34, 10, '#fff');
+    Object.entries(ROUTINES).forEach(([id, routine], i) => {
+      text(`${G.routines[id] ? '✓' : '○'} ${routine.label}`, 8, 50 + i * 14, 10, G.routines[id] ? '#8fd06a' : '#fff');
+    });
 
     if (G.flash > 0) {
       ctx.fillStyle = `rgba(201,79,79,${G.flash * 0.35})`;
@@ -662,6 +774,14 @@
 
     if (state === 'over') renderOver();
     if (state === 'win') renderWin();
+    if (paused && state === 'play') {
+      dim(0.75);
+      text('잠깐 쉬어가요', W / 2, 106, 26, '#f2d05a', 'center');
+      text('P / Esc 또는 계속 버튼으로 돌아오기', W / 2, 149, 12, '#fff', 'center');
+    }
+    document.getElementById('pause').hidden = state !== 'play';
+    document.getElementById('pause').textContent = paused ? '계속 ▶' : '잠깐 쉬기 Ⅱ';
+    document.getElementById('action').textContent = state === 'play' ? '행동 E' : '선택 화면';
   }
 
   function dim(alpha) { ctx.fillStyle = `rgba(5,5,14,${alpha})`; ctx.fillRect(0, 0, W, H); }
@@ -682,49 +802,52 @@
       rect(c.x, 92, 100, 88, on ? '#f2d05a' : '#3a3a52');
       rect(c.x + 2, 94, 96, 84, on ? '#2c2c1a' : '#191926');
       const spr = SPR[c.spr][0];
-      drawSprite(spr, c.x + 50 - spr.width * 2, 98, 2, false);
+      drawSprite(spr, c.x + 50 - spr.width, 98, 2, false);
       text(c.label, c.x + 50, 148, 16, on ? '#f2d05a' : '#c9c9d4', 'center');
       if (on) text('◀ 선택됨 ▶', c.x + 50, 166, 11, '#58d68d', 'center');
     });
-    text('← → 또는 A/D: 캐릭터 선택    E: 시작', W / 2, 192, 11, '#fff', 'center');
-    text('이동: WASD/방향키   E: 물건 집기/요청 들어주기   Q: 손의 물건 버리기', W / 2, 208, 11, '#c9c9d4', 'center');
-    text('요청이 밀리면 행복도가 깎여요', W / 2, 224, 11, '#c9c9d4', 'center');
-    text('오전 6시~자정까지 행복도 0 이상 유지! (18시부터 배우자 귀가)', W / 2, 240, 11, '#c9c9d4', 'center');
-    text('자정까지 살아남으면 승리!', W / 2, 256, 11, '#58d68d', 'center');
+    document.getElementById('action').textContent = '시작 ▶';
+    document.getElementById('pause').hidden = true;
+    text('← → 또는 A/D: 캐릭터 선택    E / 시작 버튼', W / 2, 192, 11, '#fff', 'center');
+    text('방향키: 이동 · E: 집기/전달 · Q: 내려놓기 · P: 쉬기', W / 2, 208, 11, '#c9c9d4', 'center');
+    text('화면 아래 버튼으로도 플레이할 수 있어요', W / 2, 224, 11, '#c9c9d4', 'center');
+    text('8분의 하루 · 18시 배우자 귀가 · 저녁 할 일을 모두 마쳐요', W / 2, 240, 11, '#c9c9d4', 'center');
+    text('목욕 → 저녁 → 청소 → 잠자리 → 다시 재우기', W / 2, 256, 11, '#58d68d', 'center');
   }
 
   function renderOver() {
     dim(0.72);
-    text('행복도가 0이 되었어요…', W / 2, 96, 24, '#c94f4f', 'center');
+    text(G.happiness <= 0 ? '행복도가 0이 되었어요…' : '아직 남은 일이 있어요…', W / 2, 96, 24, '#c94f4f', 'center');
     text('오늘은 여기까지! 내일은 더 잘할 수 있어요.', W / 2, 136, 12, '#fff', 'center');
     text(`성공 ${G.stats.ok} · 실패 ${G.stats.fail}`, W / 2, 160, 12, '#f2d05a', 'center');
-    text('R: 다시 도전하기', W / 2, 196, 18, '#58d68d', 'center');
+    text('R / 행동 버튼: 다시 선택하기', W / 2, 196, 18, '#58d68d', 'center');
   }
 
   function renderWin() {
     dim(0.55);
-    const maxW = 176, maxH = 104;
-    let pw = maxW, ph = maxH;
-    if (photo.complete && photo.naturalWidth) {
-      const s = Math.min(maxW / photo.naturalWidth, maxH / photo.naturalHeight);
-      pw = Math.round(photo.naturalWidth * s);
-      ph = Math.round(photo.naturalHeight * s);
-    }
-    const px = W / 2 - pw / 2, py = 24;
-    rect(px - 5, py - 5, pw + 10, ph + 10, '#f2d05a');
-    ctx.imageSmoothingEnabled = true;
-    if (photo.complete && photo.naturalWidth) ctx.drawImage(photo, px, py, pw, ph);
-    else rect(px, py, pw, ph, '#3a3a52');
+    [photo, portrait].forEach((image, i) => {
+      const x = 151 + i * 94, y = 16, width = 84, height = 126;
+      rect(x - 3, y - 3, width + 6, height + 6, '#f2d05a');
+      if (image.complete && image.naturalWidth) {
+        const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+        const pw = image.naturalWidth * scale, ph = image.naturalHeight * scale;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(image, x + (width - pw) / 2, y + (height - ph) / 2, pw, ph);
+      } else {
+        rect(x, y, width, height, '#3a3a52');
+        text('우리 가족 ♥', x + width / 2, y + 50, 11, '#fff', 'center');
+      }
+    });
     ctx.imageSmoothingEnabled = false;
-    const ty = py + ph + 12;
+    const ty = 153;
     text('오늘 하루도 무사히 이겨낸 거 축하해!', W / 2, ty, 17, '#f2d05a', 'center');
     text('매일의 도전을 더 즐겁게 맞이하자.', W / 2, ty + 24, 17, '#fff', 'center');
     text(`요청 성공 ${G.stats.ok} · 놓친 요청 ${G.stats.fail} · 06:00 → 24:00 생존!`, W / 2, ty + 52, 11, '#c9c9d4', 'center');
-    text('R: 내일도 도전하기', W / 2, ty + 72, 18, '#58d68d', 'center');
+    text('R / 행동 버튼: 내일도 도전하기', W / 2, ty + 72, 18, '#58d68d', 'center');
   }
 
   // ---------- loop ----------
-  window.__PG = { get state() { return state; }, get G() { return G; } };
+  window.__PG = { get state() { return state; }, get G() { return G; }, get paused() { return paused; } };
   let last = 0;
   function frame(ts) {
     requestAnimationFrame(frame);
