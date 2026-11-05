@@ -1,0 +1,29 @@
+{
+  "txns": [
+    {"date": "20260920", "time": "103000", "merchant": "AIR FRANCE", "amount": "980000.00", "currency": "KRW", "amount_krw": "980000.00", "approval_no": "10000001", "card_no": "1234-5678-9012-5678", "status": "", "country": "KR"},
+    {"date": "20261013", "time": "150000", "merchant": "HOTEL NOVOTEL PARIS GARE DE LYON", "amount": "1050.00", "currency": "EUR", "amount_krw": "1564500.00", "approval_no": "10000002", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261012", "time": "091500", "merchant": "BOULANGERIE PAUL", "amount": "8.50", "currency": "EUR", "amount_krw": "12665.00", "approval_no": "10000003", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261013", "time": "130000", "merchant": "BRASSERIE LIPP", "amount": "62.00", "currency": "EUR", "amount_krw": "92380.00", "approval_no": "10000004", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261013", "time": "161500", "merchant": "STARBUCKS PARIS OPERA", "amount": "5.90", "currency": "EUR", "amount_krw": "8791.00", "approval_no": "10000005", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261014", "time": "200000", "merchant": "LE PETIT BISTRO", "amount": "31.20", "currency": "EUR", "amount_krw": "46488.00", "approval_no": "10000006", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261014", "time": "120000", "merchant": "CAFE DE FLORE", "amount": "20.00", "currency": "EUR", "amount_krw": "29800.00", "approval_no": "10000007", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261012", "time": "183000", "merchant": "UBER PARIS", "amount": "34.10", "currency": "EUR", "amount_krw": "50819.00", "approval_no": "10000008", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261013", "time": "090000", "merchant": "RATP", "amount": "2.15", "currency": "EUR", "amount_krw": "3204.00", "approval_no": "10000009", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261015", "time": "074500", "merchant": "SNCF PARIS-LYON TGV", "amount": "89.00", "currency": "EUR", "amount_krw": "132610.00", "approval_no": "10000010", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261014", "time": "210000", "merchant": "LE JARDIN", "amount": "45.00", "currency": "EUR", "amount_krw": "67050.00", "approval_no": "10000011", "card_no": "1234-5678-9012-5678", "status": "취소", "country": "FR"},
+    {"date": "20261015", "time": "231000", "merchant": "NOVOTEL MINIBAR", "amount": "12.00", "currency": "EUR", "amount_krw": "17880.00", "approval_no": "10000012", "card_no": "1234-5678-9012-5678", "status": "부분취소", "country": "FR"},
+    {"date": "20261016", "time": "110000", "merchant": "AXA ASSURANCE VOYAGE", "amount": "45.00", "currency": "EUR", "amount_krw": "67050.00", "approval_no": "10000013", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261011", "time": "140000", "merchant": "ESTA USA", "amount": "21.00", "currency": "USD", "amount_krw": "27930.00", "approval_no": "10000014", "card_no": "1234-5678-9012-5678", "status": "", "country": "US"},
+    {"date": "20261014", "time": "153000", "merchant": "APPLE STORE PARIS", "amount": "1299.00", "currency": "EUR", "amount_krw": "1935510.00", "approval_no": "10000015", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261014", "time": "153100", "merchant": "APPLE STORE PARIS", "amount": "1299.00", "currency": "EUR", "amount_krw": "1935510.00", "approval_no": "10000016", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261010", "time": "193000", "merchant": "GS25", "amount": "4500.00", "currency": "KRW", "amount_krw": "4500.00", "approval_no": "10000017", "card_no": "1234-5678-9012-5678", "status": "", "country": "KR"},
+    {"date": "20261009", "time": "084500", "merchant": "스타벅스 강남", "amount": "6500.00", "currency": "KRW", "amount_krw": "6500.00", "approval_no": "10000018", "card_no": "1234-5678-9012-5678", "status": "", "country": "KR"},
+    {"date": "20261012", "time": "073000", "merchant": "인천공항 이용료", "amount": "18000.00", "currency": "KRW", "amount_krw": "18000.00", "approval_no": "10000019", "card_no": "1234-5678-9012-5678", "status": "", "country": "KR"},
+    {"date": "20261016", "time": "130000", "merchant": "PARIS BAGUETTE 파리", "amount": "12.50", "currency": "EUR", "amount_krw": "18625.00", "approval_no": "10000020", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261015", "time": "174500", "merchant": "UBER LYON", "amount": "18.30", "currency": "EUR", "amount_krw": "27267.00", "approval_no": "10000021", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261012", "time": "213000", "merchant": "TAXI G7 PARIS", "amount": "27.40", "currency": "EUR", "amount_krw": "40826.00", "approval_no": "10000022", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261016", "time": "164500", "merchant": "PHARMACIE CHAMPS ELYSEES", "amount": "24.60", "currency": "EUR", "amount_krw": "36654.00", "approval_no": "10000023", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261017", "time": "110000", "merchant": "LADUREE PARIS", "amount": "38.00", "currency": "EUR", "amount_krw": "56620.00", "approval_no": "10000024", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"},
+    {"date": "20261016", "time": "101500", "merchant": "MUSEE DU LOUVRE", "amount": "22.00", "currency": "EUR", "amount_krw": "32780.00", "approval_no": "10000025", "card_no": "1234-5678-9012-5678", "status": "", "country": "FR"}
+  ]
+}

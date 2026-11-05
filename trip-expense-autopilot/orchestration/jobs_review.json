@@ -1,0 +1,3 @@
+[{"name":"review","model":"mistral-large-4","apply":false,"files":["tea/pipeline.py","tea/deel_web.py","tea/ledger.py","tea/cli.py","tea/policy/rules.py"],
+ "system":"You are a meticulous staff engineer doing a code review. Output a concise numbered list of concrete defects only (file:function, why it is wrong, minimal fix). Prioritise: money correctness, duplicate/unsafe Deel submission, secrets leakage, crash paths. Max 12 items. No praise.",
+ "prompt":"Review these files of a tool that reads a user's Hana Card transactions, checks them against a travel policy and drafts/submits expenses to Deel. Submission must never happen without explicit approval and never twice."}]

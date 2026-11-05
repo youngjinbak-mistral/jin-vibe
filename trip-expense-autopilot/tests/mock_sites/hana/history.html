@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하나카드 이용내역</title>
+<style>
+body{font-family:sans-serif;margin:0;padding:16px;background:#f5f5f7}
+.toolbar{max-width:720px;margin:0 auto;background:#fff;padding:16px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.toolbar input{padding:8px;border:1px solid #ccc;border-radius:4px;width:110px}
+.toolbar button{padding:8px 16px;background:#009f9f;color:#fff;border:0;border-radius:4px}
+.user{font-weight:bold;margin-bottom:12px}
+.session-expired{max-width:720px;margin:24px auto;padding:24px;background:#fff0f0;color:#c00;border-radius:8px}
+.captcha-layer{display:none;max-width:720px;margin:24px auto;padding:16px;background:#fff;border:1px solid #d33;color:#d33;border-radius:8px}
+.no-data{max-width:720px;margin:24px auto;padding:24px;background:#fff;border-radius:8px;text-align:center;color:#888}
+.table-wrap{max-width:720px;margin:24px auto;overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+table{border-collapse:collapse;width:100%;min-width:720px}
+th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px;white-space:nowrap}
+.pagination{max-width:720px;margin:12px auto;text-align:center}
+.btn-next{display:inline-block;padding:8px 20px;background:#eee;border-radius:4px;color:#333;text-decoration:none;cursor:pointer}
+.detail-panel{display:none;position:fixed;left:8px;right:8px;top:8px;max-width:720px;margin:0 auto;background:#fff;padding:20px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:10}
+.detail-panel h3{margin-top:0}
+.detail-panel .btn-close{margin-top:12px;padding:8px 16px;border:0;background:#666;color:#fff;border-radius:4px}
+@media (max-width:400px){ th,td{font-size:11px;padding:5px} }
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar" style="display:none">
+  <div class="user" data-testid="user-name">홍길동님</div>
+  <input name="searchStartDate" id="from" value="20261001">
+  <input name="searchEndDate" id="to" value="20261031">
+  <button id="search">조회</button>
+</div>
+<div class="session-expired" id="session-expired" style="display:none">세션이 만료되었습니다</div>
+<div class="captcha-layer" id="captcha-layer">보안문자가 필요합니다</div>
+<div class="no-data" id="no-data" style="display:none">조회 결과가 없습니다</div>
+<div class="table-wrap" id="table-wrap"></div>
+<div class="pagination" id="pagination"></div>
+<div class="detail-panel" id="detail-panel">
+  <h3 id="d-merchant"></h3>
+  <p>금액: <span id="d-amount"></span> <span id="d-currency"></span></p>
+  <p>일자: <span id="d-date"></span></p>
+  <p>승인번호: <span id="d-approval"></span></p>
+  <p>카드번호: <span class="card-number">1234-5678-9012-5678</span></p>
+  <p>고객명: <span class="customer-name">홍길동</span></p>
+  <button class="btn-close" id="d-close">닫기</button>
+</div>
+<script>
+var rows=[], page=1, pages=1;
+function getState(){return fetch('/api/state').then(function(r){return r.json();});}
+function fmt(n){var neg=n<0;var s=Math.abs(parseFloat(n)).toFixed(2);var p=s.split('.');p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');return (neg?'-':'')+p.join('.');}
+function fdate(d){return d.slice(0,4)+'.'+d.slice(4,6)+'.'+d.slice(6,8);}
+function ftime(t){return t.slice(0,2)+':'+t.slice(2,4)+':'+t.slice(4,6);}
+function maskCard(c){var p=c.split('-');return p[0]+'-****-****-'+p[3];}
+function render(){
+  var wrap=document.getElementById('table-wrap');
+  var drift=window.__drift;
+  var cls=drift?'other-table':'tbl-list';
+  var h='<table class="'+cls+'"><thead><tr><th>이용일자</th><th>이용시간</th><th>가맹점명</th><th>이용금액</th><th>통화</th><th>원화금액</th><th>승인번호</th><th>카드번호</th><th>취소여부</th><th>국가</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr>'
+      +'<td>'+fdate(r.date)+'</td>'
+      +'<td>'+ftime(r.time)+'</td>'
+      +'<td><a class="detail-link" data-approval-no="'+r.approval_no+'" data-merchant="'+r.merchant+'" data-amount="'+r.amount+'" data-currency="'+r.currency+'" data-date="'+r.date+'">'+r.merchant+'</a></td>'
+      +'<td>'+fmt(r.amount)+'</td>'
+      +'<td>'+r.currency+'</td>'
+      +'<td>'+fmt(r.amount_krw)+'</td>'
+      +'<td>'+r.approval_no+'</td>'
+      +'<td>'+maskCard(r.card_no)+'</td>'
+      +'<td>'+r.status+'</td>'
+      +'<td>'+r.country+'</td>'
+      +'</tr>';
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+  var pag=document.getElementById('pagination');
+  if(pages>1){
+    var dis=(page>=pages)?' aria-disabled="true"':'';
+    pag.innerHTML='<a class="btn-next" id="next"'+dis+'>다음</a>';
+    var nb=document.getElementById('next');
+    nb.addEventListener('click',function(){
+      if(page>=pages)return;
+      page++;load();
+    });
+  }else{pag.innerHTML='';}
+}
+function load(){
+  var from=document.getElementById('from').value.replace(/\D/g,'');
+  var to=document.getElementById('to').value.replace(/\D/g,'');
+  fetch('/api/hana/txns?from='+from+'&to='+to+'&page='+page)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.total===0){
+        document.getElementById('no-data').style.display='block';
+        document.getElementById('table-wrap').innerHTML='';
+        document.getElementById('pagination').innerHTML='';
+        return;
+      }
+      document.getElementById('no-data').style.display='none';
+      rows=d.rows;pages=d.pages;render();
+    });
+}
+document.addEventListener('click',function(e){
+  var a=e.target.closest?e.target.closest('a.detail-link'):null;
+  if(!a)return;
+  document.getElementById('d-merchant').textContent=a.getAttribute('data-merchant');
+  document.getElementById('d-amount').textContent=fmt(a.getAttribute('data-amount'));
+  document.getElementById('d-currency').textContent=a.getAttribute('data-currency');
+  document.getElementById('d-date').textContent=fdate(a.getAttribute('data-date'));
+  document.getElementById('d-approval').textContent=a.getAttribute('data-approval-no');
+  document.getElementById('detail-panel').style.display='block';
+});
+document.getElementById('d-close').addEventListener('click',function(){
+  document.getElementById('detail-panel').style.display='none';
+});
+document.getElementById('search').addEventListener('click',function(){page=1;load();});
+getState().then(function(s){
+  window.__drift=!!s.hana_selector_drift;
+  if(s.hana_captcha){document.getElementById('captcha-layer').style.display='block';}
+  var logged=document.cookie.indexOf('hana_logged_in=1')>=0;
+  if(!logged||s.hana_session_expired){
+    document.getElementById('session-expired').style.display='block';
+    return;
+  }
+  document.getElementById('toolbar').style.display='block';
+  load();
+});
+</script>
+</body>
+</html>

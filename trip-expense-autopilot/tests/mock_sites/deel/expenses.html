@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deel Expenses</title>
+<style>
+body{font-family:sans-serif;margin:0;padding:16px;background:#f7f8fa}
+.wrap{max-width:640px;margin:0 auto}
+.toolbar{background:#fff;padding:16px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.15);margin-bottom:16px}
+button.primary{padding:10px 18px;background:#10a37f;color:#fff;border:0;border-radius:6px;font-size:15px}
+.session-expired{background:#fff0f0;color:#c00;padding:20px;border-radius:8px}
+.form{display:none;background:#fff;padding:20px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+label{display:block;margin:12px 0 4px;font-size:13px;color:#555}
+input,textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid #ccc;border-radius:5px}
+.combobox{position:relative}
+.combobox-list{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #ccc;border-radius:5px;z-index:5;max-height:200px;overflow:auto}
+[role='option']{padding:9px 12px;cursor:pointer}
+[role='option']:hover{background:#f0f0f0}
+.form-error{display:none;margin-top:12px;padding:10px;background:#fff0f0;color:#c00;border-radius:5px}
+.confirmation-ref{display:none;margin-top:16px;padding:14px;background:#e8f7f1;color:#0a6;border-radius:6px;font-weight:bold}
+</style>
+</head>
+<head></head>
+<body>
+<div class="wrap">
+  <div class="toolbar">
+    <h2>Expenses</h2>
+    <button class="primary" id="add-expense">Add Expense</button>
+  </div>
+  <div class="session-expired" id="session-expired" style="display:none">Session expired</div>
+  <div class="form" id="form">
+    <label>Category</label>
+    <div class="combobox">
+      <div role="combobox" aria-label="Category" id="category" tabindex="0" aria-expanded="false">-- select --</div>
+      <div class="combobox-list" id="category-list" role="listbox"></div>
+    </div>
+    <label>Currency</label>
+    <div class="combobox">
+      <div role="combobox" aria-label="Currency" id="currency" tabindex="0" aria-expanded="false">-- select --</div>
+      <div class="combobox-list" id="currency-list" role="listbox"></div>
+    </div>
+    <label>Amount</label>
+    <input name="amount" id="amount" type="text">
+    <label>Date</label>
+    <input name="date" id="date" type="text" placeholder="YYYY-MM-DD">
+    <label>Description</label>
+    <textarea name="description" id="description" rows="3"></textarea>
+    <label>Receipt</label>
+    <input type="file" id="file">
+    <button class="primary" id="submit" style="margin-top:16px">Submit</button>
+    <div class="form-error" id="form-error"></div>
+    <div class="confirmation-ref" id="confirmation-ref"></div>
+  </div>
+</div>
+<script>
+var sel={category:null,currency:null};
+function getState(){return fetch('/api/state').then(function(r){return r.json();});}
+function buildList(listId,items,kind){
+  var el=document.getElementById(listId);
+  el.innerHTML='';
+  items.forEach(function(v){
+    var o=document.createElement('div');
+    o.setAttribute('role','option');
+    o.textContent=v;
+    o.addEventListener('click',function(){
+      sel[kind]=v;
+      document.getElementById(kind).textContent=v;
+      el.style.display='none';
+      document.getElementById(kind).setAttribute('aria-expanded','false');
+    });
+    el.appendChild(o);
+  });
+}
+buildList('category-list',['Accommodation','Meals','Travel','Transportation','Mileage','Other'],'category');
+buildList('currency-list',['KRW','EUR','USD','GBP','SGD','CAD','CHF','PLN','AED','MAD'],'currency');
+document.getElementById('category').addEventListener('click',function(){
+  var l=document.getElementById('category-list');
+  l.style.display=l.style.display==='block'?'none':'block';
+  this.setAttribute('aria-expanded',l.style.display==='block'?'true':'false');
+});
+document.getElementById('currency').addEventListener('click',function(){
+  var l=document.getElementById('currency-list');
+  l.style.display=l.style.display==='block'?'none':'block';
+  this.setAttribute('aria-expanded',l.style.display==='block'?'true':'false');
+});
+document.getElementById('add-expense').addEventListener('click',function(){
+  document.getElementById('form').style.display='block';
+  document.getElementById('form-error').style.display='none';
+  document.getElementById('confirmation-ref').style.display='none';
+});
+document.getElementById('submit').addEventListener('click',function(){
+  var err=document.getElementById('form-error');
+  err.style.display='none';
+  document.getElementById('confirmation-ref').style.display='none';
+  var amount=parseFloat(document.getElementById('amount').value);
+  var date=document.getElementById('date').value;
+  var desc=document.getElementById('description').value;
+  var file=document.getElementById('file').files[0];
+  function fail(m){err.textContent=m;err.style.display='block';}
+  if(!sel.category){fail('Category is required');return;}
+  if(!sel.currency){fail('Currency is required');return;}
+  if(isNaN(amount)||amount<=0){fail('Amount must be greater than 0');return;}
+  if(!date){fail('Date is required');return;}
+  if(!desc){fail('Description is required');return;}
+  if(!file){fail('Receipt file is required');return;}
+  getState().then(function(s){
+    if(s.deel_form_error){fail('Receipt rejected');return;}
+    fetch('/api/deel/expenses',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        category:sel.category,
+        currency:sel.currency,
+        amount:document.getElementById('amount').value.trim(),
+        date:date,
+        description:desc,
+        filename:file.name
+      })
+    }).then(function(r){return r.json();}).then(function(d){
+      var show=function(){
+        var c=document.getElementById('confirmation-ref');
+        c.textContent=d.ref;c.style.display='block';
+      };
+      if(s.deel_slow){setTimeout(show,3000);}else{show();}
+    });
+  });
+});
+getState().then(function(s){
+  if(s.deel_session_expired){
+    document.getElementById('session-expired').style.display='block';
+    document.getElementById('add-expense').disabled=true;
+  }
+});
+</script>
+</body>
+</html>
