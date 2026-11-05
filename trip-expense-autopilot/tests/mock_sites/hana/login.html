@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하나카드 로그인</title>
+<style>
+body{font-family:sans-serif;margin:0;padding:16px;background:#f5f5f7}
+.card{max-width:360px;margin:40px auto;background:#fff;padding:24px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+input{width:100%;padding:10px;margin:6px 0;box-sizing:border-box;border:1px solid #ccc;border-radius:4px}
+button{width:100%;padding:12px;margin-top:12px;background:#009f9f;color:#fff;border:0;border-radius:4px;font-size:16px}
+.captcha-layer{display:none;margin-top:12px;padding:12px;border:1px solid #d33;color:#d33}
+#logged-in{display:none;margin-top:16px}
+#logged-in a{color:#009f9f}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>하나카드</h2>
+  <form id="login-form">
+    <input id="id" name="id" placeholder="아이디" autocomplete="off">
+    <input id="password" name="password" type="password" placeholder="비밀번호" autocomplete="off">
+    <button type="submit">로그인</button>
+  </form>
+  <div class="captcha-layer" id="captcha-layer">보안문자를 입력해주세요</div>
+  <div id="logged-in">
+    <span data-testid="user-name">홍길동님</span>
+    <p><a href="/hana/history.html">이용내역 조회</a></p>
+  </div>
+</div>
+<script>
+async function getState(){
+  try{const r=await fetch('/api/state');return await r.json();}catch(e){return {}}
+}
+(async function(){
+  const s=await getState();
+  if(s.hana_captcha){document.getElementById('captcha-layer').style.display='block';}
+})();
+document.getElementById('login-form').addEventListener('submit',function(e){
+  e.preventDefault();
+  document.cookie='hana_logged_in=1; path=/';
+  localStorage.setItem('hana_logged_in','1');
+  document.getElementById('logged-in').style.display='block';
+});
+</script>
+</body>
+</html>

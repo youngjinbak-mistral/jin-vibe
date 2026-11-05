@@ -1,0 +1,32 @@
+{
+    "expenses_url": "https://app.deel.com/expenses",
+    "add_expense": "button:has-text('Add Expense')",
+    "category_select": "[role='combobox'][aria-label='Category']",
+    "category_select_kind": "combobox",
+    "category_option_template": "[role='option']:has-text('{value}')",
+    "currency_select": "[role='combobox'][aria-label='Currency']",
+    "currency_select_kind": "combobox",
+    "currency_option_template": "[role='option']:has-text('{value}')",
+    "amount": "input[name='amount']",
+    "date": "input[name='date']",
+    "description": "textarea[name='description']",
+    "file_input": "input[type='file']",
+    "submit": "button:has-text('Submit')",
+    "confirmation_ref": ".confirmation-ref",
+    "session_expired": ".session-expired",
+    "form_error": ".form-error",
+    "category_map": {
+        "hotel": "Accommodation",
+        "meal": "Meals",
+        "flight": "Travel",
+        "train": "Travel",
+        "taxi": "Transportation",
+        "public_transport": "Transportation",
+        "car_rental": "Transportation",
+        "visa": "Travel",
+        "mileage": "Mileage",
+        "gift": "Other",
+        "other": "Other"
+    },
+    "category_default": "Other"
+}

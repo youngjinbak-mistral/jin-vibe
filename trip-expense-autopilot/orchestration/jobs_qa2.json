@@ -1,0 +1,75 @@
+[
+ {
+  "name": "qa_policy",
+  "model": "anthropic/claude-opus-5-5",
+  "files": [
+   "tea/models.py",
+   "tea/trip.py",
+   "tea/fx.py",
+   "tea/policy/rules.py"
+  ],
+  "system": "You are a senior QA engineer. Output ONLY files, each as:\n=== FILE: <relative/path> ===\n```python\n<content>\n```\nNo prose. No code comments. pytest style, plain functions, no network (use httpx.MockTransport for HTTP).",
+  "prompt": "Write adversarial pytest tests that verify behaviour against the SPEC and the Mistral travel policy (not the implementation's quirks); if the implementation is wrong the test must FAIL. tests/conftest.py ALREADY provides: make_txn(merchant, amount, currency, when_iso, status='approved', country=None, approval_no=None)->Transaction and fixture paris_trip (Trip id PAR-2026-10, start 2026-10-12T10:00+09:00, end 2026-10-17T18:00+02:00, departure_at 2026-10-12T10:00+09:00, return_arrival_at 2026-10-18T14:30+09:00, destination Paris FR 2026-10-12T00:00+02:00..2026-10-17T23:59+02:00). Import it as `from conftest import make_txn`. Use tmp_path; no network; httpx.MockTransport for HTTP. Small tests named after behaviour.\nOutput tests/test_policy.py and tests/test_trip.py. Cover: hotel caps London GBP260 vs UK (Manchester) GBP150, Paris 230 vs Europe (Lyon) 180, Brussels alias of Bruxelles 250, Montréal accent CAD350, NYC alias 350, San Francisco 475, Singapore SGD400; hotel multi-night split (1050 EUR / 5 nights Paris PASS; 1300 EUR / 5 nights FLAG with reimbursable 1150.00); hotel over cap with trip > 10 nights -> FAIL; meal daily cap aggregation across txns on the same LOCAL day, and KST timestamps on different Paris days split correctly (2026-10-14T06:30+09:00 is 2026-10-13 23:30 Paris); meal in USD in Paris converted with StaticFx({('USD','EUR'):Decimal('0.9')}); long_term halves meal caps (Paris 22.50); departure after 17:30 KST on first day -> meal FLAG 'day not eligible'; insurance FAIL reimbursable 0; visa PASS; refund negative PASS reimbursable negative; cancelled excluded from results; unknown country (e.g. 'BR') FLAG; Switzerland CHF 50 meal; Poland PLN 150 meal; Singapore SGD 55; US car rental $75/day. Trip: local_dt converts KST to Paris, location_for, nights, eligible_meal_day for first/last day thresholds (17:30 / 13:00)."
+ },
+ {
+  "name": "qa_classify_sources",
+  "model": "anthropic/claude-opus-5-5",
+  "files": [
+   "tea/models.py",
+   "tea/policy/classify.py",
+   "tea/sources/codef.py",
+   "tea/sources/csv_import.py"
+  ],
+  "system": "You are a senior QA engineer. Output ONLY files, each as:\n=== FILE: <relative/path> ===\n```python\n<content>\n```\nNo prose. No code comments. pytest style, plain functions, no network (use httpx.MockTransport for HTTP).",
+  "prompt": "Write adversarial pytest tests that verify behaviour against the SPEC and the Mistral travel policy (not the implementation's quirks); if the implementation is wrong the test must FAIL. tests/conftest.py ALREADY provides: make_txn(merchant, amount, currency, when_iso, status='approved', country=None, approval_no=None)->Transaction and fixture paris_trip (Trip id PAR-2026-10, start 2026-10-12T10:00+09:00, end 2026-10-17T18:00+02:00, departure_at 2026-10-12T10:00+09:00, return_arrival_at 2026-10-18T14:30+09:00, destination Paris FR 2026-10-12T00:00+02:00..2026-10-17T23:59+02:00). Import it as `from conftest import make_txn`. Use tmp_path; no network; httpx.MockTransport for HTTP. Small tests named after behaviour.\nOutput tests/test_classify.py and tests/test_sources.py. Classify: word boundaries (DINNER CLUB not hotel, FAIRMONT is hotel or other but NOT flight, METAL SHOP not visa), UBER EATS -> meal and UBER -> taxi, GRAB -> taxi, Korean merchants (롯데호텔 -> hotel, 김밥 식당 -> meal), AIR FRANCE -> flight, ESTA -> visa; LLM agreement and disagreement via fake llm object with complete_json(model,prompt) returning different categories per model -> 'other', LLM exception falls back. CODEF (httpx.MockTransport): URL-encoded JSON body response parsed; non CF-00000 result raises SourceError with code; 429 then 200 retried with fake sleep; token endpoint called once for two fetches; normalize_codef: resCancelYN '1' -> negative amount, '3' -> None, '2' partial subtracts resCancelAmount, overseas resHomeForeignType '2' with resAccountCurrency 'EUR', '1,234,000' comma amounts, resCardNo '1234-****-****-5678' -> '5678', timestamp Asia/Seoul. CSV: cp949 encoded file and utf-8-sig file with Korean headers 이용일자,이용시간,가맹점명,이용금액,통화,원화금액,승인번호,카드번호,취소여부,국가 parse identically; 취소 -> negative."
+ },
+ {
+  "name": "qa_io",
+  "model": "anthropic/claude-opus-5-5",
+  "files": [
+   "tea/models.py",
+   "tea/sheets.py",
+   "tea/ledger.py",
+   "tea/evidence/ocr.py",
+   "tea/drive.py"
+  ],
+  "system": "You are a senior QA engineer. Output ONLY files, each as:\n=== FILE: <relative/path> ===\n```python\n<content>\n```\nNo prose. No code comments. pytest style, plain functions, no network (use httpx.MockTransport for HTTP).",
+  "prompt": "Write adversarial pytest tests that verify behaviour against the SPEC and the Mistral travel policy (not the implementation's quirks); if the implementation is wrong the test must FAIL. tests/conftest.py ALREADY provides: make_txn(merchant, amount, currency, when_iso, status='approved', country=None, approval_no=None)->Transaction and fixture paris_trip (Trip id PAR-2026-10, start 2026-10-12T10:00+09:00, end 2026-10-17T18:00+02:00, departure_at 2026-10-12T10:00+09:00, return_arrival_at 2026-10-18T14:30+09:00, destination Paris FR 2026-10-12T00:00+02:00..2026-10-17T23:59+02:00). Import it as `from conftest import make_txn`. Use tmp_path; no network; httpx.MockTransport for HTTP. Small tests named after behaviour.\nOutput tests/test_sheets.py, tests/test_ledger.py, tests/test_ocr.py. Sheets via httpx.MockTransport recording requests: upsert maps existing txn_ids found in column A at rows 2 and 5 to ranges A2:T2 and A5:T5 and appends new ones via :append; 429 then success retried with fake sleep; sheet name 'Trip Ledger' quoted in the URL-decoded range; ensure_header rewrites row 1 when it differs; 1200 new rows -> 3 append calls; duplicate txn_id in input -> single row. Ledger: allowed transitions, submitted terminal raises ValueError, skipped->drafted only through reopen, persistence across instances. OCR with a fake client object exposing ocr(bytes)->str: '1,234,000원' matches KRW 1234000, '€ 45,50' matches EUR 45.50, '$1,234.5' matches 1234.50, amount_krw match when original amount absent, Korean merchant substring with spaces removed, mismatch returns ok False with notes; no TypeError with Decimal amounts. Drive uploader: existing file found -> no upload call."
+ },
+ {
+  "name": "qa_pipeline",
+  "model": "zai-glm-5-3",
+  "files": [
+   "tea/models.py",
+   "tea/pipeline.py",
+   "tea/sheets.py",
+   "tea/policy/classify.py"
+  ],
+  "system": "You are a senior QA engineer. Output ONLY files, each as:\n=== FILE: <relative/path> ===\n```python\n<content>\n```\nNo prose. No code comments. pytest style, plain functions, no network (use httpx.MockTransport for HTTP).",
+  "prompt": "Write adversarial pytest tests that verify behaviour against the SPEC and the Mistral travel policy (not the implementation's quirks); if the implementation is wrong the test must FAIL. tests/conftest.py ALREADY provides: make_txn(merchant, amount, currency, when_iso, status='approved', country=None, approval_no=None)->Transaction and fixture paris_trip (Trip id PAR-2026-10, start 2026-10-12T10:00+09:00, end 2026-10-17T18:00+02:00, departure_at 2026-10-12T10:00+09:00, return_arrival_at 2026-10-18T14:30+09:00, destination Paris FR 2026-10-12T00:00+02:00..2026-10-17T23:59+02:00). Import it as `from conftest import make_txn`. Use tmp_path; no network; httpx.MockTransport for HTTP. Small tests named after behaviour.\nOutput tests/test_pipeline.py. Cover run_pipeline/select_trip_txns/dedupe/deel_items: duplicate txn objects deduped; pre-trip KRW 'KOREAN AIR' charge 20 days before start included with reason containing 'pre-trip'; domestic 'GS25' KRW the day before trip excluded; screenshot callable raising RuntimeError for one txn -> that row policy_status FLAG with 'missing screenshot' in policy_reason and notes mentioning screenshot failed, other rows still produced; screenshot raising AuthRequired propagates; OCR returning ok False adds 'ocr mismatch' to notes; fake sheet sink receives ensure_header then upsert with all rows; deel_items excludes FAIL and zero reimbursable rows and keeps Decimal amounts; report.totals sums by status and currency. Use StaticFx({('EUR','KRW'):Decimal('1490')}) and tmp_path; screenshotter writes a tiny PNG file to out_dir/<txn_id>.png and returns its path."
+ },
+ {
+  "name": "qa_policy_a",
+  "model": "mistral-large-4",
+  "files": [
+   "tea/models.py",
+   "tea/trip.py",
+   "tea/fx.py",
+   "tea/policy/rules.py"
+  ],
+  "system": "You are a senior QA engineer. Output ONLY files, each as:\n=== FILE: <relative/path> ===\n```python\n<content>\n```\nNo prose. No code comments. pytest style, plain functions, no network (use httpx.MockTransport for HTTP).",
+  "prompt": "Write adversarial pytest tests that verify behaviour against the SPEC and the Mistral travel policy (not the implementation's quirks); if the implementation is wrong the test must FAIL. tests/conftest.py ALREADY provides: make_txn(merchant, amount, currency, when_iso, status='approved', country=None, approval_no=None)->Transaction and fixture paris_trip (Trip id PAR-2026-10, start 2026-10-12T10:00+09:00, end 2026-10-17T18:00+02:00, departure_at 2026-10-12T10:00+09:00, return_arrival_at 2026-10-18T14:30+09:00, destination Paris FR 2026-10-12T00:00+02:00..2026-10-17T23:59+02:00). Import it as `from conftest import make_txn`. Use tmp_path; no network; httpx.MockTransport for HTTP. Small tests named after behaviour.\nOutput ONLY tests/test_trip.py covering Trip behaviour (local_dt, location_for, nights, eligible_meal_day thresholds 17:30 / 13:00, Brussels/NYC aliases via normalize_city). Cover: hotel caps London GBP260 vs UK (Manchester) GBP150, Paris 230 vs Europe (Lyon) 180, Brussels alias of Bruxelles 250, Montréal accent CAD350, NYC alias 350, San Francisco 475, Singapore SGD400; hotel multi-night split (1050 EUR / 5 nights Paris PASS; 1300 EUR / 5 nights FLAG with reimbursable 1150.00); hotel over cap with trip > 10 nights -> FAIL; meal daily cap aggregation across txns on the same LOCAL day, and KST timestamps on different Paris days split correctly (2026-10-14T06:30+09:00 is 2026-10-13 23:30 Paris); meal in USD in Paris converted with StaticFx({('USD','EUR'):Decimal('0.9')}); long_term halves meal caps (Paris 22.50); departure after 17:30 KST on first day -> meal FLAG 'day not eligible'; insurance FAIL reimbursable 0; visa PASS; refund negative PASS reimbursable negative; cancelled excluded from results; unknown country (e.g. 'BR') FLAG; Switzerland CHF 50 meal; Poland PLN 150 meal; Singapore SGD 55; US car rental $75/day. Trip: local_dt converts KST to Paris, location_for, nights, eligible_meal_day for first/last day thresholds (17:30 / 13:00)."
+ },
+ {
+  "name": "qa_policy_b",
+  "model": "anthropic/claude-opus-5-5",
+  "files": [
+   "tea/models.py",
+   "tea/trip.py",
+   "tea/fx.py",
+   "tea/policy/rules.py"
+  ],
+  "system": "You are a senior QA engineer. Output ONLY files, each as:\n=== FILE: <relative/path> ===\n```python\n<content>\n```\nNo prose. No code comments. pytest style, plain functions, no network (use httpx.MockTransport for HTTP).",
+  "prompt": "Write adversarial pytest tests that verify behaviour against the SPEC and the Mistral travel policy (not the implementation's quirks); if the implementation is wrong the test must FAIL. tests/conftest.py ALREADY provides: make_txn(merchant, amount, currency, when_iso, status='approved', country=None, approval_no=None)->Transaction and fixture paris_trip (Trip id PAR-2026-10, start 2026-10-12T10:00+09:00, end 2026-10-17T18:00+02:00, departure_at 2026-10-12T10:00+09:00, return_arrival_at 2026-10-18T14:30+09:00, destination Paris FR 2026-10-12T00:00+02:00..2026-10-17T23:59+02:00). Import it as `from conftest import make_txn`. Use tmp_path; no network; httpx.MockTransport for HTTP. Small tests named after behaviour.\nOutput ONLY tests/test_policy.py (no trip tests). Be concise: one assertion focus per test, max ~35 tests. Cover: hotel caps London GBP260 vs UK (Manchester) GBP150, Paris 230 vs Europe (Lyon) 180, Brussels alias of Bruxelles 250, Montréal accent CAD350, NYC alias 350, San Francisco 475, Singapore SGD400; hotel multi-night split (1050 EUR / 5 nights Paris PASS; 1300 EUR / 5 nights FLAG with reimbursable 1150.00); hotel over cap with trip > 10 nights -> FAIL; meal daily cap aggregation across txns on the same LOCAL day, and KST timestamps on different Paris days split correctly (2026-10-14T06:30+09:00 is 2026-10-13 23:30 Paris); meal in USD in Paris converted with StaticFx({('USD','EUR'):Decimal('0.9')}); long_term halves meal caps (Paris 22.50); departure after 17:30 KST on first day -> meal FLAG 'day not eligible'; insurance FAIL reimbursable 0; visa PASS; refund negative PASS reimbursable negative; cancelled excluded from results; unknown country (e.g. 'BR') FLAG; Switzerland CHF 50 meal; Poland PLN 150 meal; Singapore SGD 55; US car rental $75/day. Trip: local_dt converts KST to Paris, location_for, nights, eligible_meal_day for first/last day thresholds (17:30 / 13:00)."
+ }
+]

@@ -1,0 +1,33 @@
+{
+  "login_url": "https://www.hanacard.co.kr/login.do",
+  "history_url": "https://www.hanacard.co.kr/mycard/usageList.do",
+  "logged_in": "[data-testid='user-name'], .gnb-logout",
+  "session_expired": ".session-expired, :text('세션이 만료')",
+  "captcha": "img[src*='captcha'], .captcha-layer",
+  "empty_marker": ".no-data, :text('조회 결과가 없습니다')",
+  "date_from": "input[name='searchStartDate']",
+  "date_to": "input[name='searchEndDate']",
+  "search_button": "button:has-text('조회')",
+  "row": "table.tbl-list tbody tr",
+  "cells": {
+    "date": "td:nth-child(1)",
+    "time": "td:nth-child(2)",
+    "merchant": "td:nth-child(3)",
+    "amount": "td:nth-child(4)",
+    "currency": "td:nth-child(5)",
+    "amount_krw": "td:nth-child(6)",
+    "approval_no": "td:nth-child(7)",
+    "card_no": "td:nth-child(8)",
+    "status": "td:nth-child(9)",
+    "country": "td:nth-child(10)"
+  },
+  "next_page": "a.btn-next",
+  "next_page_disabled_attr": "aria-disabled",
+  "detail_link_template": "a.detail-link[data-approval-no='{approval_no}']",
+  "detail_panel": ".detail-panel",
+  "detail_close": ".detail-panel .btn-close",
+  "mask": [
+    ".card-number",
+    ".customer-name"
+  ]
+}
