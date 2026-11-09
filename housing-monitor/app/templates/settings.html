@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>설정</h1>
+
+<section class="card" id="secrets">
+  <h2>API 키 · 클라이언트 정보</h2>
+  <p class="small muted">값은 서버의 암호화 저장소(HM_MASTER_KEY로 암호화한 DB) 또는 서버 환경변수에만 보관합니다. 저장 후에는 화면·시트·로그·내보내기 어디에도 다시 표시하지 않습니다. 이 앱은 비밀번호를 묻지 않습니다.</p>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>항목</th><th>상태</th><th>새 값 입력</th></tr></thead>
+    <tbody>
+    {% for name, label in secret_labels.items() %}
+    <tr>
+      <td>{{ label }}</td>
+      <td class="secret-status">{{ secret_status[name] }}</td>
+      <td>
+        {% if name != 'google_refresh_token' %}
+        <form method="post" action="/settings/secrets" class="row">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="{{ name }}">
+          <input type="password" name="value" autocomplete="off" required style="max-width:280px">
+          <button class="btn small" type="submit">저장</button>
+        </form>
+        {% else %}<span class="small muted">Google 로그인 시 자동 저장</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="small muted">data.go.kr 키의 이용 조건과 일일 호출 한도는 2단계(실거래가 동기화) 설정 시 공공데이터포털의 내 키 활용 신청 정보를 읽어 표시합니다. 미리 한도를 가정하지 않습니다.</p>
+</section>
+
+<section class="card" id="sheet">
+  <h2>Google Sheet 연결 (관측 기록 추가 전용)</h2>
+  <ol class="small">
+    <li>Google Cloud 콘솔에서 OAuth 클라이언트(웹 애플리케이션)를 만들고 승인된 리디렉션 URI에 <code>{{ redirect_uri }}</code>를 등록한 뒤, 위에 클라이언트 ID/시크릿을 저장합니다.</li>
+    <li>"Google 계정 연결"을 한 번 누릅니다. 요청 권한: 이메일 확인 + Google Sheets(<code>spreadsheets</code>)만.</li>
+    <li>주택 워크북 URL을 붙여넣고, 표시되는 계정 이메일과 워크북 제목을 직접 다시 입력해 확인합니다. 확인 전에는 어떤 쓰기도 하지 않습니다.</li>
+    <li>관측 기록을 넣을 기존 탭을 고르면 머리글 구조를 읽고, 기존 열 오른쪽에 붙일 새 열 배치안을 보여 줍니다. 승인해야 머리글이 추가됩니다.</li>
+  </ol>
+
+  {% if not google_connected %}
+    <form method="post" action="/oauth/google/start"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn" type="submit" {{ 'disabled' if secret_status['google_client_id'] == '미설정' or secret_status['google_client_secret'] == '미설정' }}>Google 계정 연결</button>
+    </form>
+  {% else %}
+    <div class="row"><span class="badge ok">Google 연결됨</span>
+      <form method="post" action="/oauth/google/disconnect" onsubmit="return confirm('Google 연결을 해제할까요? 시트 쓰기가 중단됩니다.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn small secondary" type="submit">연결 해제</button></form>
+    </div>
+
+    {% if not conn %}
+    <form method="post" action="/sheet/connect" class="stack" style="margin-top:1rem">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>주택 워크북 URL <input name="url" type="url" required placeholder="https://docs.google.com/spreadsheets/d/..."></label>
+      <div class="actions"><button class="btn" type="submit">워크북 확인하기</button></div>
+    </form>
+    {% else %}
+    <div class="stack" style="margin-top:1rem">
+      <dl class="kv">
+        <dt>연결된 Google 계정</dt><dd><strong>{{ conn.account_email }}</strong></dd>
+        <dt>워크북 제목</dt><dd><strong>{{ conn.title }}</strong></dd>
+        <dt>워크북 URL</dt><dd class="small">{{ conn.spreadsheet_url }}</dd>
+        <dt>상태</dt><dd>{{ {'PENDING_CONFIRMATION':'계정·워크북 확인 대기','CONFIRMED':'대상 탭 선택 대기','PLAN_PENDING':'열 배치 승인 대기','READY':'추가 가능'}[conn.state] }}</dd>
+        {% if conn.target_tab %}<dt>대상 탭</dt><dd>{{ conn.target_tab }} (머리글 {{ conn.header_row }}행)</dd>{% endif %}
+        {% if conn.last_sync_at %}<dt>마지막 동기화</dt><dd>{{ conn.last_sync_at.strftime('%Y-%m-%d %H:%M') }} UTC</dd>{% endif %}
+        {% if conn.last_error %}<dt>마지막 오류</dt><dd class="flash error">{{ conn.last_error }}</dd>{% endif %}
+      </dl>
+
+      {% if conn.state == 'PENDING_CONFIRMATION' %}
+      <div class="notice warn">위 계정과 워크북이 의도한 <strong>주택 워크북</strong>이 맞는지 확인하세요. 맞다면 두 값을 그대로 다시 입력합니다. 다르면 취소하세요. 다른 워크북으로 대신 쓰는 일은 없습니다.</div>
+      <form method="post" action="/sheet/{{ conn.id }}/confirm" class="form-grid">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>계정 이메일 다시 입력 <input name="email" required autocomplete="off"></label>
+        <label>워크북 제목 다시 입력 <input name="title" required autocomplete="off"></label>
+        <div class="actions"><button class="btn" type="submit">맞습니다, 이 워크북을 사용</button></div>
+      </form>
+      {% endif %}
+
+      {% if conn.state in ('CONFIRMED', 'PLAN_PENDING', 'READY') %}
+      <details {{ 'open' if conn.state == 'CONFIRMED' }}>
+        <summary>관측 기록을 추가할 탭 {{ '선택' if conn.state == 'CONFIRMED' else '다시 선택' }}</summary>
+        <form method="post" action="/sheet/{{ conn.id }}/tab" class="form-grid">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label>기존 탭
+            <select name="tab">{% for t in conn.tabs_snapshot or [] %}<option value="{{ t.title }}" {{ 'selected' if t.title == conn.target_tab }}>{{ t.title }}</option>{% endfor %}</select>
+          </label>
+          <label>머리글 행 번호 <input name="header_row" type="number" min="1" value="{{ conn.header_row or 1 }}"></label>
+          <div class="actions"><button class="btn secondary" type="submit">구조 읽기</button></div>
+        </form>
+        <div class="notice small">
+          기존 탭이 관측 기록에 맞지 않으면 새 탭 <strong>"{{ proposed_tab }}"</strong>을 제안합니다. 열: {% for c in proposed_plan.new_columns %}{{ c.header }}{% if not loop.last %}, {% endif %}{% endfor %}.
+          <form method="post" action="/sheet/{{ conn.id }}/new-tab" class="row" onsubmit="return confirm('워크북에 새 탭 &quot;{{ proposed_tab }}&quot;을 만들까요?')">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="approve" value="yes">
+            <button class="btn small secondary" type="submit">새 탭 생성 승인</button>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+
+      {% if conn.state == 'PLAN_PENDING' and conn.column_plan %}
+      <h3>열 배치안 — "{{ conn.target_tab }}" 탭</h3>
+      <p class="small">기존 열 {{ conn.column_plan.existing_width }}개는 그대로 둡니다. 기존 행·값은 수정·삭제·정렬하지 않으며, 새 관측 행은 마지막 사용 행 아래에만 씁니다.</p>
+      <div class="table-wrap"><table class="data small">
+        <thead><tr><th>열</th><th>머리글</th><th>용도</th></tr></thead>
+        <tbody>
+        {% for c in conn.column_plan.reused_columns %}<tr><td>{{ c.letter }}</td><td>{{ c.header }}</td><td>기존 열 재사용 ({{ c.key }})</td></tr>{% endfor %}
+        {% for c in conn.column_plan.new_columns %}<tr><td>{{ c.letter }}</td><td>{{ c.header }}</td><td><span class="badge ok">새 열</span></td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+      <form method="post" action="/sheet/{{ conn.id }}/approve-plan" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">이 배치 승인</button></form>
+      {% endif %}
+
+      {% if conn.state == 'READY' %}
+      <form method="post" action="/sheet/sync" class="row"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn" type="submit">지금 동기화</button><span class="small muted">시트에 아직 없는 기록 {{ pending_sync }}건 (기록ID+버전 기준)</span>
+      </form>
+      {% endif %}
+
+      <form method="post" action="/sheet/{{ conn.id }}/cancel" onsubmit="return confirm('이 워크북 연결을 끊을까요? 시트 내용은 그대로 둡니다.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn small danger" type="submit">워크북 연결 취소</button></form>
+    </div>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="card" id="general">
+  <h2>일반 설정</h2>
+  <form method="post" action="/settings/general" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-grid">
+      <label>실거래 시리즈 기대 갱신 주기(일) <input name="fresh_actual" type="number" min="1" value="{{ settings.freshness_days.ACTUAL }}"></label>
+      <label>호가 시리즈 기대 갱신 주기(일) <input name="fresh_asking" type="number" min="1" value="{{ settings.freshness_days.ASKING }}"></label>
+      {% for d in settings.commute_destinations %}<label>통근 목적지 {{ loop.index }} <input name="commute_{{ loop.index }}" value="{{ d }}"></label>{% endfor %}
+      <label>기준 어린이집 <input name="anchor_name" value="{{ settings.daycare_anchor.name }}"></label>
+      <label>입소 예정 <input name="anchor_enrollment" value="{{ settings.daycare_anchor.enrollment }}"></label>
+    </div>
+    <label>관심 지역 (한 줄에 "구: 동, 동") <textarea name="watch_areas" rows="6">{% for a in settings.watch_areas %}{{ a.gu }}: {{ a.dongs|join(', ') }}
+{% endfor %}</textarea></label>
+    <label class="row"><input type="checkbox" name="auto_sheet_sync" {{ 'checked' if settings.auto_sheet_sync }} style="width:auto"> 기록 저장 시 자동으로 시트에 추가</label>
+    <div class="actions"><button class="btn" type="submit">저장</button></div>
+  </form>
+</section>
+{% endblock %}

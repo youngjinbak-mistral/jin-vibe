@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "macros.html" import amount, nature_badge, status_badge %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>대시보드</h1>
+  <div class="actions"><a class="btn" href="/import">호가 붙여넣기</a><a class="btn secondary" href="/complexes/new">단지 추가</a></div>
+</div>
+<p class="muted small">각 칸은 최신 기록입니다. 실거래와 호가는 따로 표시합니다. <span class="badge stale">갱신 지연</span>은 설정한 주기 안에 새 기록이 없다는 뜻입니다.</p>
+{% if not rows %}
+<div class="notice">관심 단지가 없습니다. <a href="/complexes/new">단지를 추가</a>하세요. 기본 관심 지역: {% for a in watch_areas %}{{ a.gu }}{% if a.dongs %}({{ a.dongs|join(', ') }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+{% endif %}
+{% for cx, cells in rows %}
+<section class="card">
+  <div class="row" style="justify-content:space-between">
+    <h2><a href="/complexes/{{ cx.id }}">{{ cx.name }}</a></h2>
+    <span class="muted small">{{ cx.gu }} {{ cx.dong }} · {{ cx.nearest_station or '역 미입력' }}{% if cx.building_year %} · {{ cx.building_year }}년 준공{% endif %}{% if cx.units %} · {{ "{:,}".format(cx.units) }}세대{% endif %}</span>
+  </div>
+  <div class="table-wrap">
+  <table class="data">
+    <thead><tr><th>평형</th><th>매매</th><th>전세</th><th>월세</th></tr></thead>
+    <tbody>
+    {% for sc in ['59', '84'] %}
+    <tr>
+      <th>전용 {{ sc }}㎡</th>
+      {% for tx in ['SALE', 'JEONSE', 'WOLSE'] %}
+      <td class="num">
+        {% for nature, rec, fr in cells[(sc, tx)] %}
+          <div>{{ nature_badge(nature) }} <a href="/records/{{ rec.id }}">{{ amount(rec) }}</a> {{ status_badge(rec.status) }}
+          <span class="small muted">{{ rec.observed_date }}</span>{% if fr.stale %} <span class="badge stale">갱신 지연</span>{% endif %}</div>
+        {% else %}<span class="muted">-</span>{% endfor %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

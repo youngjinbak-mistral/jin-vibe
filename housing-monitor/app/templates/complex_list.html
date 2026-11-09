@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>관심 단지</h1>
+  <a class="btn" href="/complexes/new">단지 추가</a>
+</div>
+<p class="muted small">기본 관심 지역(편집 가능, 제한 아님): {% for a in watch_areas %}{{ a.gu }}{% if a.dongs %}({{ a.dongs|join(', ') }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>단지</th><th>구/동</th><th>가까운 역</th><th>준공</th><th>세대수</th><th>상태</th><th></th></tr></thead>
+  <tbody>
+  {% for cx in complexes %}
+  <tr>
+    <td><a href="/complexes/{{ cx.id }}">{{ cx.name }}</a></td>
+    <td>{{ cx.gu }} {{ cx.dong }}</td>
+    <td>{{ cx.nearest_station }}</td>
+    <td class="num">{{ cx.building_year or '-' }}</td>
+    <td class="num">{{ "{:,}".format(cx.units) if cx.units else '-' }}</td>
+    <td>{% if cx.active %}<span class="badge ok">관심</span>{% else %}<span class="badge">숨김</span>{% endif %}</td>
+    <td>
+      {% if cx.active %}
+      <form method="post" action="/complexes/{{ cx.id }}/remove" onsubmit="return confirm('이 단지를 관심 목록에서 제거할까요? 가격 기록이 있으면 숨김 처리만 합니다.')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn small danger" type="submit">제거</button>
+      </form>
+      {% else %}
+      <form method="post" action="/complexes/{{ cx.id }}/restore"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn small secondary" type="submit">다시 관심</button></form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted">등록된 단지가 없습니다.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
