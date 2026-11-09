@@ -257,3 +257,73 @@ def test_missing_sheets_scope_rejected(client, google, app):
     assert "Sheets 권한" in client.get("/settings").text
     with app.state.SessionLocal() as db:
         assert db.get(Secret, "google_refresh_token") is None
+
+
+def ready(client, google):
+    tok = setup_google(client)
+    conn_id = connect_and_confirm(client, google, tok)
+    client.post(f"/sheet/{conn_id}/tab", data={"csrf": tok, "tab": "후보단지", "header_row": "1"})
+    client.post(f"/sheet/{conn_id}/approve-plan", data={"csrf": tok})
+    return tok
+
+
+def obs_rows(google):
+    g = google.grid("후보단지")
+    i = g[0].index("관측ID")
+    return [(r[i], r[g[0].index("버전")]) for r in g[1:] if len(r) > i and r[i]]
+
+
+def test_initial_then_repeated_sync_is_noop(client, google, app):
+    tok = ready(client, google)
+    for price in ("20억", "21억", "22억"):
+        add_sale(client, tok, price=price, floor=price[:2], contract=f"2026-0{len(price)}-0{price[1]}")
+    first = obs_rows(google)
+    writes = len(google.writes)
+    for _ in range(3):
+        client.post("/sheet/sync", data={"csrf": tok})
+    assert obs_rows(google) == first
+    assert len(google.writes) == writes
+    assert len(first) == len(set(first))
+
+
+def test_retry_after_uncertain_response_does_not_duplicate(client, google, app):
+    tok = ready(client, google)
+    google.fail_after_put = 1
+    add_sale(client, tok, source_id="U-1")
+    rows_after_lost_response = obs_rows(google)
+    assert len(rows_after_lost_response) == 1
+    with app.state.SessionLocal() as db:
+        assert db.scalars(select(SheetAppend)).first() is None
+    assert "Google에 연결할 수 없습니다" in client.get("/settings").text
+    client.post("/sheet/sync", data={"csrf": tok})
+    client.post("/sheet/sync", data={"csrf": tok})
+    assert obs_rows(google) == rows_after_lost_response
+    with app.state.SessionLocal() as db:
+        receipt = db.scalars(select(SheetAppend)).one()
+        assert receipt.updated_range == "(이미 시트에 있음)"
+
+
+def test_missing_id_header_stops_writes(client, google):
+    tok = ready(client, google)
+    add_sale(client, tok)
+    hdr = google.grid("후보단지")[0]
+    hdr[hdr.index("관측ID")] = ""
+    n = len(google.grid("후보단지"))
+    writes = len(google.writes)
+    add_sale(client, tok, price="19억", floor="3", contract="2026-01-01")
+    client.post("/sheet/sync", data={"csrf": tok})
+    assert len(google.grid("후보단지")) == n
+    assert len(google.writes) == writes
+    assert "머리글" in client.get("/settings").text
+
+
+def test_new_version_appends_row_and_keeps_old(client, google):
+    tok = ready(client, google)
+    add_sale(client, tok, source_id="V-1")
+    add_sale(client, tok, price="19억 9,000", source_id="V-1")
+    rows = obs_rows(google)
+    assert [v for _, v in rows] == [1, 2]
+    assert rows[0][0] == rows[1][0]
+    g = google.grid("후보단지")
+    col = g[0].index("매매가(원)")
+    assert [r[col] for r in g[4:6]] == [2_098_000_000, 1_990_000_000]

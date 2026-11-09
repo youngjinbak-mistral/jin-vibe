@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 
-from app.money import parse_krw, parse_manwon
+from app.money import EOK, MASK, MoneyToken, scan_money
 
 PYEONG_M2 = 3.305785
 
@@ -34,7 +34,6 @@ class ParsedListing:
     warnings: list[str] = field(default_factory=list)
 
 
-_AMT = r"\d[\d,]*(?:\.\d+)?\s*억(?:\s*\d[\d,]*(?:\s*천)?(?:\s*만)?)?|\d[\d,]*(?:\.\d+)?\s*천(?:\s*만)?|\d[\d,]*(?:\s*만)?"
 _NUM = r"\d+(?:\.\d+)?"
 _AREA_UNIT = r"(?:㎡|m²|m2|제곱미터)"
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
@@ -60,7 +59,7 @@ def _detect_tx(text: str, warnings: list[str]) -> str | None:
         found.add("JEONSE")
     if "월세" in t:
         found.add("WOLSE")
-    if not found and re.search(r"보증금\s*(?:" + _AMT + r")\s*[/,]?\s*월(?:세)?\s*\d", t):
+    if not found and re.search(r"보증금[^\n]*?월(?:세|임대료)?\s*[:：]?\s*\d", t):
         found.add("WOLSE")
     if len(found) > 1:
         warnings.append(WARN_MULTI_TYPE)
@@ -74,32 +73,188 @@ def _detect_nature(text: str) -> str:
     return "ASKING"
 
 
-def _amount(s: str | None) -> int | None:
-    if not s:
+_MASK_PATTERNS = [
+    re.compile(r"(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일"),
+    re.compile(r"(?<!\d)\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}\.?(?!\d)"),
+    re.compile(r"(?<![\d.])\d{2}\.\d{1,2}\.\d{1,2}\.?(?!\d)"),
+    re.compile(r"\d{1,2}\s*월\s*\d{1,2}\s*일"),
+    re.compile(r"\d+(?:\.\d+)?\s*/\s*\d+(?:\.\d+)?\s*(?:㎡|m²|m2|제곱미터|평)"),
+    re.compile(r"\d+(?:\.\d+)?\s*(?:㎡|m²|m2|제곱미터|평)"),
+    re.compile(r"(?:\d{1,3}|저|중|고)\s*/\s*\d{1,3}\s*층"),
+    re.compile(r"(?:지하\s*)?\d{1,3}\s*층"),
+    re.compile(r"\d+\s*(?:동|호|세대|개동|대|년차|년식|년|개월|분|초|m|km|%|퍼센트|타입|형)(?![가-힣])"),
+    re.compile(r"(?<!\d)(?:59|84)\s*[A-Za-z](?![A-Za-z])"),
+    re.compile(r"(?:\+?82[-\s]?|0)\d{1,2}[-\s]\d{3,4}[-\s]\d{4}"),
+]
+
+_LABELS = [
+    ("월임대료", "monthly"),
+    ("월세금", "monthly"),
+    ("반전세", "wolse"),
+    ("월세", "wolse"),
+    ("전세보증금", "deposit"),
+    ("보증금", "deposit"),
+    ("전세가", "jeonse"),
+    ("전세금", "jeonse"),
+    ("전세", "jeonse"),
+    ("매매가", "sale"),
+    ("매매", "sale"),
+    ("매도가", "sale"),
+    ("실거래가", "generic"),
+    ("거래가", "generic"),
+    ("호가", "generic"),
+    ("가격", "generic"),
+    ("관리비", "other"),
+    ("융자", "other"),
+    ("대출", "other"),
+    ("채권최고액", "other"),
+    ("시세", "other"),
+    ("공시", "other"),
+    ("취득세", "other"),
+    ("세금", "other"),
+    ("수수료", "other"),
+    ("중개", "other"),
+    ("분양가", "other"),
+    ("하한", "other"),
+    ("상한", "other"),
+    ("평균", "other"),
+    ("최고", "other"),
+    ("최저", "other"),
+    ("이전", "other"),
+    ("기존", "other"),
+    ("직전", "other"),
+    ("월", "monthly"),
+]
+_LABEL_RE = re.compile("|".join(re.escape(k) for k, _ in _LABELS))
+_LABEL_KIND = dict(_LABELS)
+
+WARN_AMOUNT_AMBIGUOUS = "금액 '{frag}'을(를) 확정할 수 없습니다: {reason}. 금액 칸에 직접 입력하세요"
+WARN_AMOUNT_MULTIPLE = "{field} 후보가 여러 개입니다 ({values}). 금액 칸에 직접 입력하세요"
+WARN_AMOUNT_IMPLAUSIBLE = "{field} {value}원은 비정상적인 값입니다. 금액 칸에 직접 입력하세요"
+WARN_AMOUNT_MISSING = "{field}을(를) 찾지 못했습니다. 금액 칸에 직접 입력하세요"
+
+
+def mask_non_money(text: str) -> str:
+    chars = list(text)
+    for pat in _MASK_PATTERNS:
+        for m in pat.finditer(text):
+            if m.group(0).endswith("월") and "월" in m.group(0) and not re.search(r"\d\s*일", m.group(0)):
+                continue
+            for i in range(m.start(), m.end()):
+                if chars[i] != "\n":
+                    chars[i] = MASK
+    return "".join(chars)
+
+
+def _label_in(segment: str, last: bool) -> str | None:
+    found = None
+    for m in _LABEL_RE.finditer(segment):
+        k = m.group(0)
+        if k == "전세" and m.start() > 0 and segment[m.start() - 1] == "반":
+            continue
+        if k == "월" and m.end() < len(segment) and segment[m.end()] in "세임":
+            continue
+        found = _LABEL_KIND[k]
+        if not last:
+            return found
+    return found
+
+
+@dataclass
+class _Money:
+    tok: MoneyToken
+    label: str
+    frag: str
+    pair_with: int | None = None
+
+
+def _label_tokens(masked: str, tokens: list[MoneyToken]) -> list[_Money]:
+    out = []
+    for i, t in enumerate(tokens):
+        prev_end = tokens[i - 1].end if i else 0
+        line_start = masked.rfind("\n", 0, t.start) + 1
+        seg = masked[max(prev_end, line_start) : t.start]
+        label = _label_in(seg, last=True)
+        if label is None:
+            nxt = tokens[i + 1].start if i + 1 < len(tokens) else len(masked)
+            line_end = masked.find("\n", t.end)
+            line_end = len(masked) if line_end < 0 else line_end
+            trail = masked[t.end : min(nxt, line_end)]
+            trail_label = _label_in(trail[:6], last=False)
+            if trail_label in ("sale", "jeonse", "wolse"):
+                label = trail_label
+        out.append(_Money(t, label or "generic", masked[t.start : t.end].strip()))
+    for i in range(len(out) - 1):
+        a, b = out[i], out[i + 1]
+        between = masked[a.tok.end : b.tok.start]
+        if re.fullmatch(r"\s*/\s*", between):
+            a.pair_with = i + 1
+            b.label = "pair_monthly"
+    return out
+
+
+def _directly_labeled(masked: str, m: _Money) -> bool:
+    seg = masked[: m.tok.start].rstrip(" \t:：")
+    return bool(_LABEL_RE.search(seg[-6:])) and seg[-1:] not in ("", "\n", MASK)
+
+
+def _usable(masked: str, m: _Money) -> bool:
+    if m.label in ("other",):
+        return False
+    if m.tok.explicit:
+        return True
+    return m.label != "generic" and (_directly_labeled(masked, m) or m.label == "pair_monthly")
+
+
+def _pick(field: str, cands: list[_Money], warnings: list[str], lo: int, hi: int) -> int | None:
+    if not cands:
         return None
-    return parse_krw(re.sub(r"\s+", "", s))
+    for c in cands:
+        if c.tok.ambiguous:
+            warnings.append(WARN_AMOUNT_AMBIGUOUS.format(frag=c.frag, reason=c.tok.reason))
+            return None
+    values = sorted({c.tok.value for c in cands})
+    if len(values) > 1:
+        warnings.append(WARN_AMOUNT_MULTIPLE.format(field=field, values=", ".join(c.frag for c in cands)))
+        return None
+    v = values[0]
+    if not (lo <= v <= hi):
+        warnings.append(WARN_AMOUNT_IMPLAUSIBLE.format(field=field, value=f"{v:,}"))
+        return None
+    return v
 
 
 def _parse_prices(text: str, tx_type: str, warnings: list[str]):
+    masked = mask_non_money(text)
+    ms = [m for m in _label_tokens(masked, scan_money(masked)) if _usable(masked, m)]
+    primary_range = (10_000_000, 1_000 * EOK)
     if tx_type == "SALE":
-        m = re.search(r"매매(?:가)?\s*[:：]?\s*(" + _AMT + r")", text)
-        return (_amount(m.group(1)) if m else None), None, None
+        cands = [m for m in ms if m.label == "sale" or (m.label == "generic" and m.tok.explicit)]
+        price = _pick("매매가", cands, warnings, *primary_range)
+        if price is None and not cands:
+            warnings.append(WARN_AMOUNT_MISSING.format(field="매매가"))
+        return price, None, None
     if tx_type == "JEONSE":
-        m = re.search(r"(?<!반)전세(?:가|금)?\s*[:：]?\s*(" + _AMT + r")", text)
-        if not m:
-            m = re.search(r"보증금\s*[:：]?\s*(" + _AMT + r")", text)
-        return None, (_amount(m.group(1)) if m else None), None
-    deposit = monthly = None
-    m = re.search(r"(?:반전세|월세)\s*[:：]?\s*(" + _AMT + r")\s*/\s*(\d[\d,]*)", text)
-    if m:
-        deposit, monthly = _amount(m.group(1)), parse_manwon(m.group(2))
-    else:
-        d = re.search(r"보증금\s*[:：]?\s*(" + _AMT + r")", text)
-        r = re.search(r"월(?:세|임대료)?\s*[:：]?\s*(\d[\d,]*)\s*(?:만)?(?!\s*[억천])(?!\s*\d)", text[d.end():] if d else text)
-        if d:
-            deposit = _amount(d.group(1))
-        if r:
-            monthly = parse_manwon(r.group(1))
+        cands = [m for m in ms if m.label in ("jeonse", "deposit") or (m.label == "generic" and m.tok.explicit)]
+        dep = _pick("전세 보증금", cands, warnings, *primary_range)
+        if dep is None and not cands:
+            warnings.append(WARN_AMOUNT_MISSING.format(field="전세 보증금"))
+        return None, dep, None
+    dep_c: list[_Money] = []
+    mon_c: list[_Money] = []
+    for m in ms:
+        if m.label == "pair_monthly":
+            mon_c.append(m)
+        elif m.pair_with is not None and m.label in ("wolse", "deposit", "generic"):
+            dep_c.append(m)
+        elif m.label == "deposit":
+            dep_c.append(m)
+        elif m.label == "monthly":
+            mon_c.append(m)
+        elif m.label == "wolse":
+            (mon_c if dep_c else dep_c).append(m)
+    deposit = _pick("월세 보증금", dep_c, warnings, 0, 1_000 * EOK)
+    monthly = _pick("월세", mon_c, warnings, 10_000, 100_000_000)
     if deposit is None or monthly is None:
         warnings.append(WARN_WOLSE_PAIR)
         return None, None, None

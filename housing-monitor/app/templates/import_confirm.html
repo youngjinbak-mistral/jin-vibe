@@ -42,8 +42,8 @@
   <fieldset class="card">
     <legend>금액 (예: 12억 5,000 / 7억 / 5,000 → 만원 단위)</legend>
     <div class="form-grid">
-      <label data-tx="SALE">매매가 <input name="price" value="{{ (p.price_krw|krw) if p.price_krw else '' }}" placeholder="12억 5,000"></label>
-      <label data-tx="JEONSE WOLSE">보증금 (전세금 또는 월세 보증금) <input name="deposit" value="{{ (p.deposit_krw|krw) if p.deposit_krw is not none else '' }}" placeholder="7억"></label>
+      <label data-tx="SALE">매매가 <input name="price" value="{{ p.price_krw|krw_input }}" placeholder="12억 5,000"></label>
+      <label data-tx="JEONSE WOLSE">보증금 (전세금 또는 월세 보증금) <input name="deposit" value="{{ p.deposit_krw|krw_input }}" placeholder="7억"></label>
       <label data-tx="WOLSE">월세 (만원) <input name="monthly_rent_man" inputmode="numeric" value="{{ (p.monthly_rent_krw // 10000) if p.monthly_rent_krw else '' }}" placeholder="250"></label>
     </div>
     <p class="small muted">매매 기록에는 매매가만, 전세에는 보증금만, 월세에는 보증금+월세를 함께 저장합니다. 다른 칸은 무시됩니다.</p>

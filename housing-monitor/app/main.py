@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import secrets
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -33,7 +34,7 @@ from .models import (
     Setting,
     UnitType,
 )
-from .money import format_eok, format_krw, parse_krw, parse_manwon
+from .money import format_eok, format_krw, format_krw_input, parse_krw_strict, parse_manwon
 from .records import (
     Candidate,
     RecordValidationError,
@@ -61,6 +62,24 @@ def _auth_dependency(app_password: str | None):
     return check
 
 
+class ConfigError(RuntimeError):
+    pass
+
+
+def _check_production_config(app_password: str | None, session_secret: str | None, base_url: str, master_key: str | None):
+    problems = []
+    if not master_key:
+        problems.append("HM_MASTER_KEY")
+    if not app_password or len(app_password) < 12:
+        problems.append("HM_APP_PASSWORD (12자 이상)")
+    if not session_secret or len(session_secret) < 32:
+        problems.append("HM_SESSION_SECRET (32자 이상)")
+    if not base_url.startswith("https://"):
+        problems.append("HM_PUBLIC_BASE_URL (https://)")
+    if problems:
+        raise ConfigError("HM_ENV=production 에서 필수 설정이 없거나 약합니다: " + ", ".join(problems))
+
+
 def create_app(
     database_url: str | None = None,
     master_key: str | None = None,
@@ -68,7 +87,16 @@ def create_app(
     session_secret: str | None = None,
     app_password: str | None = None,
     public_base_url: str | None = None,
+    production: bool | None = None,
 ) -> FastAPI:
+    production = production if production is not None else os.environ.get("HM_ENV") == "production"
+    if production:
+        _check_production_config(
+            app_password if app_password is not None else os.environ.get("HM_APP_PASSWORD"),
+            session_secret or os.environ.get("HM_SESSION_SECRET"),
+            (public_base_url or os.environ.get("HM_PUBLIC_BASE_URL") or ""),
+            master_key if master_key is not None else os.environ.get("HM_MASTER_KEY"),
+        )
     engine = make_engine(database_url)
     SessionLocal = init_db(engine)
     store = SecretStore(master_key if master_key is not None else os.environ.get("HM_MASTER_KEY"))
@@ -86,16 +114,38 @@ def create_app(
         log.warning("HM_APP_PASSWORD is not set: the UI has no login. Bind to 127.0.0.1 only.")
 
     app = FastAPI(title="서울 아파트 시세 모니터", docs_url=None, redoc_url=None, openapi_url=None)
+    secure = base_url.startswith("https://")
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        h = response.headers
+        h["X-Content-Type-Options"] = "nosniff"
+        h["X-Frame-Options"] = "DENY"
+        h["Referrer-Policy"] = "no-referrer"
+        h["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; form-action 'self' https://accounts.google.com; "
+            "frame-ancestors 'none'; base-uri 'none'"
+        )
+        if not request.url.path.startswith("/static/"):
+            h["Cache-Control"] = "no-store"
+        if secure:
+            h["Strict-Transport-Security"] = "max-age=31536000"
+        return response
+
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
         same_site="lax",
-        https_only=base_url.startswith("https://"),
+        https_only=secure,
+        session_cookie="hm_session",
         max_age=60 * 60 * 24 * 14,
     )
     app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
     templates = Jinja2Templates(directory=BASE / "templates")
     templates.env.filters["krw"] = format_krw
+    templates.env.filters["krw_input"] = format_krw_input
     templates.env.filters["eok"] = format_eok
     templates.env.globals.update(TX_LABELS=TX_LABELS, NATURE_LABELS=NATURE_LABELS, STATUS_LABELS=STATUS_LABELS)
     app.state.SessionLocal = SessionLocal
@@ -144,12 +194,18 @@ def create_app(
         request.session["flashes"] = [*request.session.get("flashes", []), [kind, msg]]
 
     def render(request: Request, name: str, ctx: dict, status_code: int = 200):
-        with SessionLocal() as db:
-            pending = db.scalar(select(func.count(ReviewItem.id)).where(ReviewItem.status == "PENDING"))
-            conn = sheet_sync.active_connection(db)
+        signed_in = request.session.get("authed") is True
+        allowed = signed_in or not app_password
+        pending, conn = 0, None
+        if allowed:
+            with SessionLocal() as db:
+                pending = db.scalar(select(func.count(ReviewItem.id)).where(ReviewItem.status == "PENDING"))
+                conn = sheet_sync.active_connection(db)
         flashes = request.session.pop("flashes", [])
         base = {
             "request": request,
+            "authed": bool(app_password) and signed_in,
+            "show_nav": allowed,
             "csrf": csrf_token(request),
             "flashes": flashes,
             "pending_reviews": pending,
@@ -195,13 +251,22 @@ def create_app(
             return redirect("/")
         return render(request, "login.html", {})
 
+    failures: list[float] = []
+
     @app.post("/login")
     def login(request: Request, password: str = Form(...), csrf: str = Form("")):
         check_csrf(request, csrf)
+        now = time.monotonic()
+        failures[:] = [t for t in failures if now - t < 900]
+        if len(failures) >= 10:
+            flash(request, "error", "로그인 시도가 너무 많습니다. 15분 후 다시 시도하세요.")
+            return redirect("/login")
         if app_password and secrets.compare_digest(password.encode(), app_password.encode()):
+            failures.clear()
             request.session.clear()
             request.session["authed"] = True
             return redirect("/")
+        failures.append(now)
         flash(request, "error", "비밀번호가 올바르지 않습니다.")
         return redirect("/login")
 
@@ -483,21 +548,25 @@ def create_app(
             v = (form.get(name) or "").strip()
             return date.fromisoformat(v) if v else None
 
+        def amount(name: str, label: str, example: str) -> int:
+            value, err = parse_krw_strict(form.get(name))
+            if err:
+                raise RecordValidationError(f"{label}: {err}")
+            if value is None:
+                raise RecordValidationError(f"{label}을(를) 입력하세요 (예: {example}).")
+            return value
+
         tx = form.get("tx_type") or ""
         price = deposit = monthly = None
         if tx == "SALE":
-            price = parse_krw(form.get("price"))
-            if price is None:
-                raise RecordValidationError("매매가를 입력하세요 (예: 12억 5,000).")
+            price = amount("price", "매매가", "12억 5,000")
         elif tx == "JEONSE":
-            deposit = parse_krw(form.get("deposit"))
-            if deposit is None:
-                raise RecordValidationError("전세 보증금을 입력하세요 (예: 7억).")
+            deposit = amount("deposit", "전세 보증금", "7억")
         elif tx == "WOLSE":
-            deposit = parse_krw(form.get("deposit"))
+            deposit = amount("deposit", "월세 보증금", "1억")
             monthly = parse_manwon(form.get("monthly_rent_man"))
-            if deposit is None or monthly is None:
-                raise RecordValidationError("월세는 보증금과 월세(만원)를 함께 입력해야 합니다.")
+            if monthly is None:
+                raise RecordValidationError("월세는 보증금과 월세(만원, 정수)를 함께 입력해야 합니다.")
         else:
             raise RecordValidationError("거래유형을 선택하세요.")
         cid = form.get("complex_id")
@@ -815,5 +884,5 @@ def _app_from_env():
     return create_app()
 
 
-if os.environ.get("HM_AUTOCREATE", "1") == "1" and os.environ.get("HM_MASTER_KEY"):
+if os.environ.get("HM_AUTOCREATE", "1") == "1" and (os.environ.get("HM_MASTER_KEY") or os.environ.get("HM_ENV") == "production"):
     app = _app_from_env()

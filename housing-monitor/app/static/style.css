@@ -495,3 +495,8 @@ dl.kv dd {
     scroll-behavior: auto !important;
   }
 }
+
+.inline-form {
+  display: inline;
+  margin: 0;
+}

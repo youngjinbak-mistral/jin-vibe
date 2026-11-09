@@ -2,30 +2,50 @@
 
 Single-user web app for comparing 매매 (buy) vs 전세 vs 월세 on apartment complexes in east/central Seoul. It keeps a registry of watched complexes, records prices as separate, versioned series, and mirrors new observations into your existing housing Google Sheet without touching your own rows.
 
-Status: **Phase 1** (registry, manual import, price-history charts, one-time Google Sheet connection with append-only versioned sync). Phase 2 (MOLIT 실거래가 scheduled sync) and Phase 3 (buy/rent calculator + alerts) are not built yet.
+Status: **Phase 1 + v2 fixes** (registry, manual import, price-history charts, one-time Google Sheet connection with append-only versioned sync). Phase 2 (MOLIT 실거래가 scheduled sync) and Phase 3 (buy/rent calculator + alerts) are not built yet.
 
 ## Run locally
 
 ```bash
 cd housing-monitor
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt
+python3.12 -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt -c constraints.txt
 export HM_MASTER_KEY=$(python -m app.keygen)
-export HM_SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(32))")
-export HM_APP_PASSWORD='choose-one'
+export HM_SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))")
+export HM_APP_PASSWORD='choose-a-long-one'
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Open http://127.0.0.1:8000. Run the tests with `python -m pytest -q`.
 
+`requirements.txt` holds the direct pins. `constraints.txt` is the full resolved set (including transitive dependencies) that the test suite was verified against with Python 3.12.
+
 | Variable | Purpose |
 |---|---|
-| `HM_MASTER_KEY` | Required. Fernet key that encrypts every stored secret (Google refresh token, client secret, data.go.kr key). Keep it in your platform's secret manager. The app refuses to start without it. |
-| `HM_SESSION_SECRET` | Signs the browser session cookie. Set it so logins survive restarts. |
-| `HM_APP_PASSWORD` | Optional login gate for the UI. Set it whenever the app is reachable by anyone but you. |
-| `HM_PUBLIC_BASE_URL` | Base URL used to build the Google OAuth redirect URI. |
-| `HM_DATABASE_URL` | SQLAlchemy URL. Defaults to local SQLite; PostgreSQL works as well (amounts use `BIGINT`). |
+| `HM_MASTER_KEY` | Required. Fernet key that encrypts every stored secret (Google refresh token, client secret, data.go.kr key). Keep it in your platform's secret manager **and** in an offline copy. Without it, a restored database cannot decrypt the Google token and you must reconnect. |
+| `HM_SESSION_SECRET` | Signs the browser session cookie. Required in production (at least 32 characters). |
+| `HM_APP_PASSWORD` | Owner login for the UI. Required in production (at least 12 characters). |
+| `HM_PUBLIC_BASE_URL` | Public base URL; the Google OAuth redirect URI is `<base>/oauth/google/callback`. Must be `https://` in production; it also enables the `Secure` cookie flag and HSTS. |
+| `HM_ENV` | Set to `production` to refuse startup unless the four values above are present and strong. |
+| `HM_DATABASE_URL` | SQLAlchemy URL. Defaults to local SQLite. Production uses `sqlite:////data/housing_monitor.db` on a persistent volume. |
+| `FORWARDED_ALLOW_IPS` | IPs whose `X-Forwarded-*` headers uvicorn trusts. Set it to the proxy address, or `*` only when the platform's proxy is the only route to the container. |
 | `HM_GOOGLE_CLIENT_ID`, `HM_GOOGLE_CLIENT_SECRET`, `HM_MOLIT_SERVICE_KEY` | Optional. When set, these environment variables take precedence over the values entered in Settings. |
+
+## Production
+
+The container image (`Dockerfile`) runs as a non-root user with `HM_ENV=production`, stores SQLite on the `/data` volume, and starts:
+
+```
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips="$FORWARDED_ALLOW_IPS" --workers 1
+```
+
+Keep it to one worker: SQLite and the in-process Sheet sync lock and login throttle assume a single process. `deploy/fly.toml.example` is a template for Fly.io; it is not wired to any account.
+
+- **Access.** Every page and API route requires the owner login, except `/login` and `/healthz`. Unauthenticated pages render no navigation or data. Login attempts are throttled (10 failures per 15 minutes). All state-changing forms require a CSRF token. Responses carry HSTS, CSP, `X-Frame-Options: DENY`, and `Cache-Control: no-store`.
+- **Start / stop.** `docker run -d --name hm -p 127.0.0.1:8080:8080 -v hm_data:/data --env-file <secret-env-file> <image>`, then `docker stop hm` / `docker start hm`. On Fly: `fly deploy`, `fly machine stop` / `fly machine start`. Put TLS in front with the platform's proxy; never expose port 8080 directly.
+- **Backup.** `python scripts/backup.py backup <dir>` writes a consistent SQLite copy (`sqlite3` online backup plus `integrity_check`) with mode 600. On Fly: `fly ssh console -C "python scripts/backup.py backup /data/backups"`, then `fly sftp get`. Volume snapshots are an additional layer. Store the backup and `HM_MASTER_KEY` separately.
+- **Restore.** Stop the app, run `python scripts/backup.py restore <file>` (it keeps a `pre-restore` copy of the current database), and start with the **same** `HM_MASTER_KEY`.
+- **Rollback.** Code: redeploy the previous image (`fly releases`, then `fly deploy --image <previous-image>`; with Docker, run the previous tag). Data: restore the most recent backup taken before the bad release. Schema: this version only creates tables (no migrations), so older images can read the database.
 
 ## Data rules (enforced in code and DB constraints)
 
@@ -39,6 +59,15 @@ Open http://127.0.0.1:8000. Run the tests with `python -m pytest -q`.
   - Without a provider ID: matched on a SHA-256 fingerprint of the full field set.
   - Partial matches (for example same price and floor but a different date) go to the **검토 대기** (review) queue and are never merged automatically. You then choose: separate deal, new version, or discard.
 - **추정 (estimates).** Records and complex fields flagged as estimates are labeled 추정 everywhere they appear. Phase 3 alerts will ignore them.
+
+## Money parsing
+
+`app/money.py` scans text into money tokens, and `app/listing_parser.py` assigns each token to a field by its label:
+
+- **Masking.** Area (㎡, m², 평, `112/84㎡`), floors (`15층`, `15/25층`), dates, 동/호/세대 counts, and phone numbers are masked before amounts are scanned, so those numbers can never become a price.
+- **Tokens.** A token is `N억 [M천|M만|M]`, `N천[만]`, `N만`, `N원`, or a bare number (만원). `12억 5,000` means 12억 5,000만원. Anything after 억 is only absorbed if it is a separate number token with an explicit or unambiguous unit.
+- **Field assignment.** Each token is assigned by the nearest label: 매매/매매가 → price, 전세/전세금/보증금 → deposit, 월세/월/`a/b` pairs → 월세 deposit and rent. Amounts labeled 관리비, 융자, 대출, 시세 and similar are ignored.
+- **Flagged, never guessed.** Ambiguous amounts (`12억 5`, `12억 5,000원`, `1,250,000,000` with no unit), conflicting values, or a 월세 without both halves leave the amount blank with a warning on the preview, and the save form rejects them. Nothing is guessed or saved silently.
 
 ## Asking prices (Naver 부동산 / 호갱노노)
 

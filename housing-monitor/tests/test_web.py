@@ -65,7 +65,7 @@ def test_paste_parse_shows_confirmation_without_saving(client, app):
     html = client.post("/import/parse", data={"csrf": tok, "text": text}).text
     assert 'value="JEONSE" selected' in html
     assert 'value="84" selected' in html
-    assert "9억 5,000만원" in html
+    assert 'value="9억 5,000만"' in html
     assert 'value="2025-03-14"' in html
     assert "2512345678" in html
     with app.state.SessionLocal() as db:
@@ -222,3 +222,48 @@ def test_non_finite_area_rejected(client, app):
 def test_unknown_review_action_400(client):
     tok = csrf_of(client, "/import")
     assert client.post("/review/1", data={"csrf": tok, "action": "merge"}).status_code == 400
+
+
+def test_preview_required_examples_prefill_exact_amounts(client):
+    tok = csrf_of(client, "/import")
+    cases = [
+        ("전세 8억 84㎡", 'name="deposit" value="8억"'),
+        ("매매 84㎡ 12억", 'name="price" value="12억"'),
+        ("전세 84㎡ 보증금 8억", 'name="deposit" value="8억"'),
+        ("전세 15층 8억", 'name="deposit" value="8억"'),
+        ("매매 12억 5,000", 'name="price" value="12억 5,000만"'),
+    ]
+    for text, needle in cases:
+        html = client.post("/import/parse", data={"csrf": tok, "text": text}).text
+        assert needle in html, text
+
+
+def test_preview_ambiguous_amount_is_flagged_and_left_blank(client, app):
+    tok = csrf_of(client, "/import")
+    html = client.post("/import/parse", data={"csrf": tok, "text": "매매 12억 5 84㎡"}).text
+    assert "확정할 수 없습니다" in html
+    assert 'name="price" value=""' in html
+    with app.state.SessionLocal() as db:
+        assert db.scalars(select(PriceRecord)).first() is None
+
+
+def test_confirm_rejects_ambiguous_or_polluted_amount(client, app):
+    tok = csrf_of(client, "/import")
+    for bad in ("12억 84㎡", "12억 5", "1,200,000,000", "12억 15층", "12억 13억"):
+        client.post("/import/confirm", data={
+            "csrf": tok, "confirmed": "on", "complex_id": "1", "size_class": "84", "tx_type": "SALE",
+            "nature": "ASKING", "price": bad, "source_name": "x",
+        })
+        assert "저장하지 않았습니다" in client.get("/import").text, bad
+    with app.state.SessionLocal() as db:
+        assert db.scalars(select(PriceRecord)).first() is None
+
+
+def test_confirm_saves_exact_krw(client, app):
+    tok = csrf_of(client, "/import")
+    client.post("/import/confirm", data={
+        "csrf": tok, "confirmed": "on", "complex_id": "1", "size_class": "84", "tx_type": "SALE",
+        "nature": "ASKING", "price": "12억 5,000", "source_name": "x",
+    })
+    with app.state.SessionLocal() as db:
+        assert db.scalars(select(PriceRecord)).one().price_krw == 1_250_000_000

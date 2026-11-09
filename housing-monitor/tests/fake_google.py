@@ -37,6 +37,7 @@ class FakeGoogle:
         self.writes: list[tuple[str, str]] = []
         self.access_tokens_issued = 0
         self.refresh_token = "rt-secret-value"
+        self.fail_after_put = 0
         self.granted_scope = "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/spreadsheets"
 
     def add_tab(self, title, rows=None, row_count=1000, col_count=26):
@@ -196,6 +197,9 @@ class FakeGoogle:
                     self._write_range(rng, body["values"])
                 except ValueError:
                     return httpx.Response(400, json={"error": {"message": "exceeds grid limits"}})
+                if self.fail_after_put:
+                    self.fail_after_put -= 1
+                    raise httpx.ReadTimeout("response lost after write", request=request)
                 return httpx.Response(200, json={"updatedRange": rng})
             if rng.endswith(":append"):
                 raise AssertionError("app must not use :append (it can insert rows and shift user data)")
