@@ -1,0 +1,16 @@
+{% macro tx_badge(tx) -%}
+<span class="badge {{ {'SALE':'sale','JEONSE':'jeonse','WOLSE':'wolse'}[tx] }}">{{ TX_LABELS[tx] }}</span>
+{%- endmacro %}
+{% macro nature_badge(n) -%}
+<span class="badge {{ 'actual' if n == 'ACTUAL' else 'asking' }}">{{ NATURE_LABELS[n] }}</span>
+{%- endmacro %}
+{% macro status_badge(s) -%}
+{% if s == 'CANCELLED' %}<span class="badge cancelled">해제(취소)</span>{% elif s == 'AMENDED' %}<span class="badge amended">정정</span>{% endif %}
+{%- endmacro %}
+{% macro amount(r) -%}
+{% if r.is_estimate %}<span class="badge estimate" title="{{ r.estimate_note }}">추정</span> {% endif -%}
+{% if r.tx_type == 'SALE' %}{{ r.price_krw|krw }}{% elif r.tx_type == 'JEONSE' %}{{ r.deposit_krw|krw }}{% else %}보증금 {{ r.deposit_krw|krw }} / 월 {{ r.monthly_rent_krw|krw }}{% endif %}
+{%- endmacro %}
+{% macro area(r) -%}
+전용 {{ r.exclusive_m2 if r.exclusive_m2 is not none else '?' }}㎡{% if r.supply_m2 is not none %} · 공급 {{ r.supply_m2 }}㎡{% endif %}
+{%- endmacro %}

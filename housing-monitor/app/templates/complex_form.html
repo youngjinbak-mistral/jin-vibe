@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ '단지 수정: ' ~ cx.name if cx else '단지 추가' }}</h1>
+<form method="post" action="{{ '/complexes/' ~ cx.id if cx else '/complexes' }}" class="stack">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <fieldset class="card">
+    <legend>기본 정보</legend>
+    <div class="form-grid">
+      <label>단지명 * <input name="name" required value="{{ cx.name if cx }}"></label>
+      <label>별칭 (쉼표 구분, 붙여넣기 매칭용) <input name="aliases" value="{{ cx.aliases if cx }}" placeholder="래미안파크스위트, 구의 래미안"></label>
+      <label>구 * <input name="gu" required list="gu-list" value="{{ cx.gu if cx }}"></label>
+      <label>동 <input name="dong" value="{{ cx.dong if cx }}"></label>
+      <label>가까운 지하철역 <input name="nearest_station" value="{{ cx.nearest_station if cx }}" placeholder="아차산역 (5호선)"></label>
+      <label>역까지 거리(m) <input name="station_distance_m" inputmode="numeric" value="{{ cx.station_distance_m if cx and cx.station_distance_m is not none }}"></label>
+      <label>역까지 도보(분) <input name="station_walk_min" inputmode="numeric" value="{{ cx.station_walk_min if cx and cx.station_walk_min is not none }}"></label>
+      <label>준공연도 <input name="building_year" inputmode="numeric" value="{{ cx.building_year if cx and cx.building_year }}"></label>
+      <label>세대수 <input name="units" inputmode="numeric" value="{{ cx.units if cx and cx.units }}"></label>
+      <label>언덕/경사 메모 <input name="hill_note" value="{{ cx.hill_note if cx }}"></label>
+    </div>
+    <datalist id="gu-list">{% for a in watch_areas %}<option value="{{ a.gu }}">{% endfor %}</datalist>
+  </fieldset>
+  <fieldset class="card">
+    <legend>평형 (전용면적과 공급면적은 따로 입력)</legend>
+    <div class="form-grid">
+      {% for sc in ['59', '84'] %}
+      {% set u = cx.unit(sc) if cx else none %}
+      <label>전용 {{ sc }}㎡ 타입 · 전용면적(㎡) <input name="u{{ sc }}_exclusive_m2" inputmode="decimal" value="{{ u.exclusive_m2 if u and u.exclusive_m2 is not none }}" placeholder="{{ '59.96' if sc == '59' else '84.97' }}"></label>
+      <label>전용 {{ sc }}㎡ 타입 · 공급면적(㎡) <input name="u{{ sc }}_supply_m2" inputmode="decimal" value="{{ u.supply_m2 if u and u.supply_m2 is not none }}" placeholder="{{ '80' if sc == '59' else '112' }}"></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <fieldset class="card">
+    <legend>생활 정보 (저장 데이터일 뿐 결정 기준 아님)</legend>
+    <div class="form-grid">
+      <label>기준 어린이집({{ anchor.name }}, 입소 예정 {{ anchor.enrollment }})까지 거리(m) <input name="daycare_anchor_distance_m" inputmode="numeric" value="{{ cx.daycare_anchor_distance_m if cx and cx.daycare_anchor_distance_m is not none }}"></label>
+      <label>기준 어린이집까지 시간(분) <input name="daycare_anchor_minutes" inputmode="numeric" value="{{ cx.daycare_anchor_minutes if cx and cx.daycare_anchor_minutes is not none }}"></label>
+      {% for d in commutes %}
+      <label>{{ d or ('목적지 ' ~ loop.index) }}까지 통근(분, 직접 입력) <input name="commute_{{ loop.index }}_min" inputmode="numeric" value="{{ cx['commute_' ~ loop.index ~ '_min'] if cx and cx['commute_' ~ loop.index ~ '_min'] is not none }}"></label>
+      {% endfor %}
+      <label>세대당 주차(대) <input name="parking_per_unit" inputmode="decimal" value="{{ cx.parking_per_unit if cx and cx.parking_per_unit is not none }}"></label>
+      <label class="row"><input type="checkbox" name="parking_is_estimate" {{ 'checked' if cx and cx.parking_is_estimate }} style="width:auto"> 주차 값은 규칙 기반 추정치 ("추정" 표시)</label>
+    </div>
+    <label>근처 다른 어린이집 <textarea name="daycare_other_options" rows="2">{{ cx.daycare_other_options if cx }}</textarea></label>
+    <label>메모 <textarea name="notes" rows="3">{{ cx.notes if cx }}</textarea></label>
+  </fieldset>
+  <fieldset class="card">
+    <legend>실거래가 연동 (2단계에서 사용)</legend>
+    <div class="form-grid">
+      <label>법정동 시군구코드(5자리) <input name="molit_lawd_cd" value="{{ cx.molit_lawd_cd if cx }}" placeholder="11215 (광진구)"></label>
+      <label>실거래가 자료상 단지명 <input name="molit_apt_name" value="{{ cx.molit_apt_name if cx }}"></label>
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn" type="submit">저장</button><a class="btn secondary" href="{{ '/complexes/' ~ cx.id if cx else '/complexes' }}">취소</a></div>
+</form>
+{% endblock %}

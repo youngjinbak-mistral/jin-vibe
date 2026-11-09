@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>호가·기록 입력</h1>
+<div class="notice">
+  Naver 부동산·호갱노노는 자동 수집하지 않습니다. 매물 화면의 텍스트(또는 링크)를 직접 복사해 붙여넣으면, 앱이 단지·평형·거래유형·가격·날짜를 추출하고 <strong>저장 전에 반드시 확인</strong>을 받습니다. 링크는 출처로만 저장되며 앱이 접속하지 않습니다.
+</div>
+<form method="post" action="/import/parse" class="card stack">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>매물 텍스트 / 링크 붙여넣기
+    <textarea name="text" rows="10" required placeholder="래미안파크스위트 103동&#10;전세 9억 5,000&#10;112/84㎡, 12/23층&#10;확인 25.03.14.&#10;https://new.land.naver.com/complexes/...?articleNo=..."></textarea>
+  </label>
+  <div class="actions">
+    <button class="btn" type="submit">추출하기</button>
+    <a class="btn secondary" href="/import/manual{{ '?complex_id=' ~ complex_id if complex_id }}">붙여넣기 없이 직접 입력</a>
+  </div>
+</form>
+{% endblock %}

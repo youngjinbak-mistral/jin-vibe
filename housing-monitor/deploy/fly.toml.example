@@ -1,0 +1,29 @@
+app = "REPLACE-WITH-YOUR-APP-NAME"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  HM_ENV = "production"
+  HM_DATABASE_URL = "sqlite:////data/housing_monitor.db"
+  HM_PUBLIC_BASE_URL = "https://REPLACE-WITH-YOUR-APP-NAME.fly.dev"
+  FORWARDED_ALLOW_IPS = "*"
+
+[[mounts]]
+  source = "hm_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"

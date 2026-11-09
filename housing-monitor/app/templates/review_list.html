@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import tx_badge %}
+{% block content %}
+<h1>검토 대기열</h1>
+<p class="muted small">기존 기록과 일부만 일치하는 새 기록은 자동 병합하지 않고 여기에 쌓입니다. 같은 층·같은 가격이어도 다른 거래일 수 있습니다.</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>#</th><th>후보</th><th>사유</th><th>상태</th><th>생성</th></tr></thead>
+  <tbody>
+  {% for it in items %}
+  {% set c = it.candidate %}
+  <tr>
+    <td><a href="/review/{{ it.id }}">{{ it.id }}</a></td>
+    <td>{{ cxs[c.complex_id].name if c.complex_id in cxs else '?' }} · 전용 {{ c.size_class }}㎡ {{ tx_badge(c.tx_type) }}</td>
+    <td class="small">{{ it.reasons }}</td>
+    <td>{% if it.status == 'PENDING' %}<span class="badge ambiguous">검토 필요</span>{% else %}<span class="badge">{{ {'SEPARATE':'별개 저장','NEW_VERSION':'새 버전','DISCARDED':'버림'}[it.status] }}</span>{% endif %}</td>
+    <td class="small">{{ it.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">검토할 항목이 없습니다.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

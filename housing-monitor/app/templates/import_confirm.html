@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ '직접 입력' if manual else '추출 결과 확인' }}</h1>
+{% if not manual %}
+  {% if p.warnings %}<div class="flash warn"><strong>확인 필요:</strong><ul>{% for w in p.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if not p.complex_id %}<div class="flash warn">단지를 자동으로 찾지 못했습니다{% if p.complex_name_guess %} (추정: "{{ p.complex_name_guess }}"){% endif %}. 아래에서 선택하세요.</div>{% endif %}
+{% endif %}
+<form method="post" action="/import/confirm" class="stack" id="record-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <fieldset class="card">
+    <legend>시리즈</legend>
+    <div class="form-grid">
+      <label>단지 *
+        <select name="complex_id" required>
+          <option value="">선택</option>
+          {% for c in complexes %}<option value="{{ c.id }}" {{ 'selected' if c.id == p.complex_id }}>{{ c.name }} ({{ c.gu }} {{ c.dong }})</option>{% endfor %}
+        </select>
+      </label>
+      <label>평형 (전용 기준) *
+        <select name="size_class" required>
+          <option value="">선택</option>
+          <option value="59" {{ 'selected' if p.size_class == '59' }}>전용 59㎡</option>
+          <option value="84" {{ 'selected' if p.size_class == '84' }}>전용 84㎡</option>
+        </select>
+      </label>
+      <label>거래유형 *
+        <select name="tx_type" required id="tx_type">
+          <option value="">선택</option>
+          <option value="SALE" {{ 'selected' if p.tx_type == 'SALE' }}>매매</option>
+          <option value="JEONSE" {{ 'selected' if p.tx_type == 'JEONSE' }}>전세</option>
+          <option value="WOLSE" {{ 'selected' if p.tx_type == 'WOLSE' }}>월세</option>
+        </select>
+      </label>
+      <label>자료 성격 *
+        <select name="nature" required>
+          <option value="ASKING" {{ 'selected' if p.nature == 'ASKING' }}>호가 (매물 등록가)</option>
+          <option value="ACTUAL" {{ 'selected' if p.nature == 'ACTUAL' }}>실거래 (신고된 계약)</option>
+        </select>
+      </label>
+    </div>
+  </fieldset>
+  <fieldset class="card">
+    <legend>금액 (예: 12억 5,000 / 7억 / 5,000 → 만원 단위)</legend>
+    <div class="form-grid">
+      <label data-tx="SALE">매매가 <input name="price" value="{{ p.price_krw|krw_input }}" placeholder="12억 5,000"></label>
+      <label data-tx="JEONSE WOLSE">보증금 (전세금 또는 월세 보증금) <input name="deposit" value="{{ p.deposit_krw|krw_input }}" placeholder="7억"></label>
+      <label data-tx="WOLSE">월세 (만원) <input name="monthly_rent_man" inputmode="numeric" value="{{ (p.monthly_rent_krw // 10000) if p.monthly_rent_krw else '' }}" placeholder="250"></label>
+    </div>
+    <p class="small muted">매매 기록에는 매매가만, 전세에는 보증금만, 월세에는 보증금+월세를 함께 저장합니다. 다른 칸은 무시됩니다.</p>
+  </fieldset>
+  <fieldset class="card">
+    <legend>세부 정보</legend>
+    <div class="form-grid">
+      <label>전용면적(㎡) <input name="exclusive_m2" inputmode="decimal" value="{{ p.exclusive_m2 if p.exclusive_m2 is not none }}"></label>
+      <label>공급면적(㎡) <input name="supply_m2" inputmode="decimal" value="{{ p.supply_m2 if p.supply_m2 is not none }}"></label>
+      <label>층 <input name="floor" value="{{ p.floor or '' }}"></label>
+      <label>상태
+        <select name="status"><option value="ACTIVE">정상</option><option value="CANCELLED">해제(취소)</option><option value="AMENDED">정정</option></select>
+      </label>
+      <label>계약일 (실거래) <input type="date" name="contract_date" value="{{ p.observed_date if p.nature == 'ACTUAL' and p.observed_date else '' }}"></label>
+      <label>신고일 / 매물 확인일 <input type="date" name="report_date" value="{{ p.observed_date if p.nature != 'ACTUAL' and p.observed_date else '' }}"></label>
+    </div>
+  </fieldset>
+  <fieldset class="card">
+    <legend>출처</legend>
+    <div class="form-grid">
+      <label>출처 이름 * <input name="source_name" required value="{{ p.source_name or ('수동 입력' if manual else '') }}" list="source-list"></label>
+      <label>출처 URL <input name="source_url" type="url" value="{{ p.source_url or '' }}"></label>
+      <label>출처 매물/거래 ID <input name="source_record_id" value="{{ p.source_listing_id or '' }}"></label>
+      <label>출처 버전 <input name="source_version" value=""></label>
+    </div>
+    <datalist id="source-list"><option value="Naver 부동산"><option value="호갱노노"><option value="국토교통부 실거래가"><option value="수동 입력"></datalist>
+    <label>원문 (그대로 저장됨) <textarea name="raw_snippet" rows="5">{{ raw }}</textarea></label>
+  </fieldset>
+  <fieldset class="card">
+    <legend>추정 표시</legend>
+    <label class="row"><input type="checkbox" name="is_estimate" style="width:auto"> 규칙 기반 추정치입니다 ("추정"으로 표시되고 알림을 발생시키지 않음)</label>
+    <label>추정 근거 <input name="estimate_note" value=""></label>
+  </fieldset>
+  <div class="card">
+    <label class="row"><input type="checkbox" name="confirmed" required style="width:auto"> 위 내용(단지·평형·거래유형·금액·날짜)을 확인했습니다.</label>
+    <div class="actions"><button class="btn" type="submit">저장</button><a class="btn secondary" href="/import">취소</a></div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var sel = document.getElementById("tx_type");
+  function sync() {
+    document.querySelectorAll("[data-tx]").forEach(function (el) {
+      var on = !sel.value || el.getAttribute("data-tx").split(" ").indexOf(sel.value) >= 0;
+      el.hidden = !on;
+      el.querySelectorAll("input").forEach(function (i) { i.disabled = !on; });
+    });
+  }
+  sel.addEventListener("change", sync);
+  sync();
+})();
+</script>
+{% endblock %}

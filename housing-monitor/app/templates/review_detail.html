@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import amount, nature_badge, tx_badge, area, status_badge %}
+{% block content %}
+<h1>검토 #{{ item.id }}</h1>
+<div class="notice warn"><pre class="small" style="white-space:pre-wrap;margin:0">{{ item.reasons }}</pre></div>
+<div class="grid">
+  <section class="card">
+    <h3>새 후보</h3>
+    <dl class="kv">
+      <dt>단지</dt><dd>{{ cx.name if cx else '?' }}</dd>
+      <dt>시리즈</dt><dd>전용 {{ cand.size_class }}㎡ {{ tx_badge(cand.tx_type) }} {{ nature_badge(cand.nature) }} {{ status_badge(cand.status) }}</dd>
+      <dt>금액</dt><dd>{{ amount(cand) }}</dd>
+      <dt>면적</dt><dd>{{ area(cand) }}</dd>
+      <dt>층</dt><dd>{{ cand.floor or '-' }}</dd>
+      <dt>계약일</dt><dd>{{ cand.contract_date or '-' }}</dd>
+      <dt>신고·확인일</dt><dd>{{ cand.report_date or '-' }}</dd>
+      <dt>출처</dt><dd>{{ cand.source_name }} {{ cand.source_url }}</dd>
+      <dt>출처 ID</dt><dd>{{ cand.source_record_id or '-' }}</dd>
+    </dl>
+    <pre class="snippet">{{ cand.raw_snippet }}</pre>
+  </section>
+  {% if item.matched_record %}{% set r = item.matched_record %}
+  <section class="card">
+    <h3>기존 기록 <a href="/records/{{ r.id }}">#{{ r.id }}</a> (v{{ r.version }})</h3>
+    <dl class="kv">
+      <dt>시리즈</dt><dd>전용 {{ r.size_class }}㎡ {{ tx_badge(r.tx_type) }} {{ nature_badge(r.nature) }} {{ status_badge(r.status) }}</dd>
+      <dt>금액</dt><dd>{{ amount(r) }}</dd>
+      <dt>면적</dt><dd>{{ area(r) }}</dd>
+      <dt>층</dt><dd>{{ r.floor or '-' }}</dd>
+      <dt>계약일</dt><dd>{{ r.contract_date or '-' }}</dd>
+      <dt>신고·확인일</dt><dd>{{ r.report_date or '-' }}</dd>
+      <dt>출처</dt><dd>{{ r.source_name }} {{ r.source_url }}</dd>
+      <dt>출처 ID</dt><dd>{{ r.source_record_id or '-' }}</dd>
+    </dl>
+    <pre class="snippet">{{ r.raw_snippet }}</pre>
+  </section>
+  {% endif %}
+</div>
+{% if item.status == 'PENDING' %}
+<form method="post" action="/review/{{ item.id }}" class="card actions">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button class="btn" name="action" value="separate" type="submit">별개 거래로 저장</button>
+  {% if item.matched_record %}<button class="btn secondary" name="action" value="new_version" type="submit">기존 기록의 새 버전으로 저장</button>{% endif %}
+  <button class="btn danger" name="action" value="discard" type="submit">버리기</button>
+</form>
+{% else %}
+<p class="muted">처리 완료: {{ item.status }}{% if item.resolution_record_id %} → <a href="/records/{{ item.resolution_record_id }}">기록 #{{ item.resolution_record_id }}</a>{% endif %}</p>
+{% endif %}
+{% endblock %}

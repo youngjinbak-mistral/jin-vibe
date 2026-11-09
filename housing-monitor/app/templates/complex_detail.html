@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "macros.html" import amount, nature_badge, status_badge, tx_badge, area %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>{{ cx.name }}{% if not cx.active %} <span class="badge">숨김</span>{% endif %}</h1>
+  <div class="actions">
+    <a class="btn" href="/import?complex_id={{ cx.id }}">호가 붙여넣기</a>
+    <a class="btn secondary" href="/import/manual?complex_id={{ cx.id }}">직접 입력</a>
+    <a class="btn secondary" href="/complexes/{{ cx.id }}/edit">수정</a>
+  </div>
+</div>
+<div class="grid">
+  <section class="card">
+    <h3>단지 정보</h3>
+    <dl class="kv">
+      <dt>위치</dt><dd>{{ cx.gu }} {{ cx.dong }}</dd>
+      <dt>가까운 역</dt><dd>{{ cx.nearest_station or '-' }}{% if cx.station_distance_m %} · {{ cx.station_distance_m }}m{% endif %}{% if cx.station_walk_min %} · 도보 {{ cx.station_walk_min }}분{% endif %}</dd>
+      <dt>준공</dt><dd>{{ cx.building_year or '-' }}{% if cx.building_age is not none %} ({{ cx.building_age }}년차){% endif %}</dd>
+      <dt>세대수</dt><dd>{{ "{:,}".format(cx.units) if cx.units else '-' }}</dd>
+      {% for u in cx.unit_types %}
+      <dt>전용 {{ u.size_class }}㎡ 타입</dt><dd>전용 {{ u.exclusive_m2 if u.exclusive_m2 is not none else '?' }}㎡ / 공급 {{ u.supply_m2 if u.supply_m2 is not none else '?' }}㎡</dd>
+      {% endfor %}
+      <dt>언덕/경사</dt><dd>{{ cx.hill_note or '-' }}</dd>
+      <dt>주차</dt><dd>{% if cx.parking_per_unit is not none %}{{ cx.parking_per_unit }}대/세대{% if cx.parking_is_estimate %} <span class="badge estimate">추정</span>{% endif %}{% else %}-{% endif %}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h3>생활 정보</h3>
+    <dl class="kv">
+      <dt>{{ anchor.name }} (입소 예정 {{ anchor.enrollment }})</dt><dd>{% if cx.daycare_anchor_distance_m is not none %}{{ cx.daycare_anchor_distance_m }}m{% endif %}{% if cx.daycare_anchor_minutes is not none %} · {{ cx.daycare_anchor_minutes }}분{% endif %}{% if cx.daycare_anchor_distance_m is none and cx.daycare_anchor_minutes is none %}-{% endif %}</dd>
+      <dt>기타 어린이집</dt><dd>{{ cx.daycare_other_options or '-' }}</dd>
+      {% for d in commutes %}{% if d %}<dt>통근: {{ d }}</dt><dd>{% set v = cx['commute_' ~ loop.index ~ '_min'] %}{{ v ~ '분' if v is not none else '-' }}</dd>{% endif %}{% endfor %}
+    </dl>
+    {% if cx.notes %}<p class="small">{{ cx.notes }}</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>가격 이력</h2>
+  <form id="chart-filters" class="row">
+    <label>거래유형
+      <select name="tx_type"><option value="SALE">매매</option><option value="JEONSE">전세</option><option value="WOLSE">월세</option></select>
+    </label>
+    <label class="row"><input type="checkbox" name="size_class" value="59" checked style="width:auto"> 전용 59㎡</label>
+    <label class="row"><input type="checkbox" name="size_class" value="84" checked style="width:auto"> 전용 84㎡</label>
+    <label class="row"><input type="checkbox" name="nature" value="ACTUAL" checked style="width:auto"> 실거래</label>
+    <label class="row"><input type="checkbox" name="nature" value="ASKING" checked style="width:auto"> 호가</label>
+  </form>
+  <div id="price-chart" data-series-url="/api/complexes/{{ cx.id }}/series"></div>
+  <div class="table-wrap">
+  <table class="data small">
+    <thead><tr><th>시리즈</th><th>현재 기록 수</th><th>마지막 갱신</th><th>기대 주기</th><th></th></tr></thead>
+    <tbody>
+    {% for sc in ['59', '84'] %}{% for tx in ['SALE', 'JEONSE', 'WOLSE'] %}{% for n in ['ACTUAL', 'ASKING'] %}
+    {% set f = fresh[(sc, tx, n)] %}
+    {% if f.count or f.last_updated %}
+    <tr><td>전용 {{ sc }}㎡ {{ tx_badge(tx) }} {{ nature_badge(n) }}</td><td class="num">{{ f.count }}</td>
+      <td>{{ f.last_updated.strftime('%Y-%m-%d') if f.last_updated else '-' }}</td><td>{{ f.expected_days }}일</td>
+      <td>{% if f.stale %}<span class="badge stale">갱신 지연</span>{% else %}<span class="badge ok">최신</span>{% endif %}</td></tr>
+    {% endif %}
+    {% endfor %}{% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>기록 목록 (모든 버전)</h2>
+  <div class="table-wrap">
+  <table class="data">
+    <thead><tr><th>유형</th><th>평형/면적</th><th>금액</th><th>층</th><th>계약일</th><th>신고·확인일</th><th>출처</th><th>버전</th></tr></thead>
+    <tbody>
+    {% for r in records %}
+    <tr{% if not r.is_current %} class="muted"{% endif %}>
+      <td>{{ tx_badge(r.tx_type) }} {{ nature_badge(r.nature) }} {{ status_badge(r.status) }}</td>
+      <td>{{ area(r) }}</td>
+      <td class="num"><a href="/records/{{ r.id }}">{{ amount(r) }}</a></td>
+      <td>{{ r.floor or '-' }}</td>
+      <td>{{ r.contract_date or '-' }}</td>
+      <td>{{ r.report_date or '-' }}</td>
+      <td>{% if r.source_url %}<a href="{{ r.source_url }}" rel="noopener noreferrer" target="_blank">{{ r.source_name }}</a>{% else %}{{ r.source_name }}{% endif %}</td>
+      <td>v{{ r.version }}{% if not r.is_current %} (이전){% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted">기록이 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/chart.js"></script>{% endblock %}

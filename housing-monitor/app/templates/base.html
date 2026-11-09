@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>{% block title %}서울 아파트 시세 모니터{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand"><strong>서울 아파트 시세 모니터</strong></a>
+  {% if show_nav %}<nav>
+    <a href="/" class="{{ 'active' if nav == 'home' }}">대시보드</a>
+    <a href="/complexes" class="{{ 'active' if nav == 'complexes' }}">관심 단지</a>
+    <a href="/import" class="{{ 'active' if nav == 'import' }}">호가·기록 입력</a>
+    <a href="/review" class="{{ 'active' if nav == 'review' }}">검토 대기{% if pending_reviews %} <span class="badge ambiguous">{{ pending_reviews }}</span>{% endif %}</a>
+    <a href="/settings" class="{{ 'active' if nav == 'settings' }}">설정{% if sheet_state and sheet_state != 'READY' %} <span class="badge ambiguous">시트</span>{% endif %}</a>
+    {% if authed %}<form method="post" action="/logout" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn small secondary">로그아웃</button></form>{% endif %}
+  </nav>{% endif %}
+</header>
+<main class="container">
+  {% for kind, msg in flashes %}<div class="flash {{ kind }}" role="status">{{ msg }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="container small muted">
+  실거래(국토교통부)와 호가(수동 입력)는 별도 시리즈입니다. 매매·전세·월세는 서로 섞이지 않습니다. 금액은 원 단위 정수로 저장합니다.
+</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

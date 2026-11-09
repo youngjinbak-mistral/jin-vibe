@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import amount, nature_badge, status_badge, tx_badge, area %}
+{% block content %}
+<h1>기록 #{{ rec.id }} <span class="small muted">{{ rec.record_uid }} · v{{ rec.version }}{% if not rec.is_current %} (이전 버전){% endif %}</span></h1>
+<section class="card">
+  <dl class="kv">
+    <dt>단지</dt><dd><a href="/complexes/{{ rec.complex_id }}">{{ rec.complex.name }}</a></dd>
+    <dt>시리즈</dt><dd>전용 {{ rec.size_class }}㎡ {{ tx_badge(rec.tx_type) }} {{ nature_badge(rec.nature) }} {{ status_badge(rec.status) }}</dd>
+    <dt>금액</dt><dd>{{ amount(rec) }}</dd>
+    <dt>원 단위 (저장값)</dt><dd class="secret-status">{% if rec.tx_type == 'SALE' %}price_krw={{ rec.price_krw }}{% else %}deposit_krw={{ rec.deposit_krw }}{% if rec.tx_type == 'WOLSE' %}, monthly_rent_krw={{ rec.monthly_rent_krw }}{% endif %}{% endif %}</dd>
+    <dt>면적</dt><dd>{{ area(rec) }}</dd>
+    <dt>층</dt><dd>{{ rec.floor or '-' }}</dd>
+    <dt>계약일</dt><dd>{{ rec.contract_date or '-' }}</dd>
+    <dt>신고·확인일</dt><dd>{{ rec.report_date or '-' }}</dd>
+    <dt>수집 시각</dt><dd>{{ rec.captured_at.strftime('%Y-%m-%d %H:%M') }} (UTC)</dd>
+    <dt>출처</dt><dd>{{ rec.source_name }}{% if rec.source_url %} · <a href="{{ rec.source_url }}" rel="noopener noreferrer" target="_blank">원문 링크</a>{% endif %}</dd>
+    <dt>출처 ID / 버전</dt><dd>{{ rec.source_record_id or '-' }} / {{ rec.source_version or '-' }}</dd>
+    {% if rec.is_estimate %}<dt>추정 근거</dt><dd><span class="badge estimate">추정</span> {{ rec.estimate_note or '-' }}</dd>{% endif %}
+    {% if rec.change_reason %}<dt>버전 사유</dt><dd>{{ rec.change_reason }}</dd>{% endif %}
+  </dl>
+  <h3>원문</h3>
+  <pre class="snippet">{{ rec.raw_snippet or '(원문 없음)' }}</pre>
+</section>
+<section class="card">
+  <h2>버전 이력</h2>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>버전</th><th>금액</th><th>상태</th><th>저장 시각</th><th>사유</th></tr></thead>
+    <tbody>{% for v in versions %}
+      <tr><td><a href="/records/{{ v.id }}">v{{ v.version }}</a>{% if v.is_current %} <span class="badge ok">현재</span>{% endif %}</td><td class="num">{{ amount(v) }}</td><td>{{ status_badge(v.status) or '정상' }}</td><td>{{ v.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td class="small">{{ v.change_reason }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <h3>Google Sheet 기록</h3>
+  {% if appends %}<ul class="small">{% for a in appends %}<li>v{{ a.version }} → {{ a.updated_range }} ({{ a.appended_at.strftime('%Y-%m-%d %H:%M') }})</li>{% endfor %}</ul>
+  {% else %}<p class="muted small">아직 시트에 추가되지 않았습니다.</p>{% endif %}
+</section>
+{% endblock %}
